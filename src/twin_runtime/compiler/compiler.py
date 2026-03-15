@@ -139,14 +139,19 @@ class PersonaCompiler:
         if not fragments:
             if existing:
                 return existing, self.evidence_graph, []
-            raise ValueError("No evidence fragments found and no existing TwinState to update.")
+            # Cold start with no evidence
+            twin = self._create_initial(user_id="user-default", fragments=[])
+            return twin, self.evidence_graph, []
 
         extracted = self.extract_parameters(fragments)
 
-        if existing:
-            updated = self._merge_into_existing(existing, extracted, fragments)
+        if existing is None:
+            twin = self._create_initial(user_id="user-default", fragments=fragments)
+            if extracted:
+                twin = self._merge_into_existing(twin, extracted, fragments)
+            updated = twin
         else:
-            updated = self._create_initial(extracted, fragments)
+            updated = self._merge_into_existing(existing, extracted, fragments)
 
         return updated, self.evidence_graph, fragments
 
@@ -209,18 +214,112 @@ class PersonaCompiler:
 
         return updated
 
-    def _create_initial(
-        self,
-        extracted: Dict[str, Any],
-        fragments: List[EvidenceFragment],
-    ) -> TwinState:
-        """Create a new TwinState from extracted parameters.
+    def _create_initial(self, user_id: str = "user-default", fragments: Optional[List] = None) -> TwinState:
+        """Create a minimal TwinState for cold start.
 
-        This is the cold-start path — requires LLM to fill in gaps.
+        With zero evidence: all parameters at population median, all reliabilities
+        below threshold (twin will DEGRADE/REFUSE). With some evidence: set what
+        we can, leave the rest at median.
         """
-        # This would be a more complex implementation in production
-        # For now, raise to indicate we need an existing state
-        raise NotImplementedError(
-            "Cold-start TwinState creation from evidence not yet implemented. "
-            "Provide an existing TwinState for incremental updates."
+        from twin_runtime.models.twin_state import (
+            TwinState, SharedDecisionCore, CausalBeliefModel,
+            DomainHead, EvidenceWeightProfile, TransferCoefficient,
+            ReliabilityProfileEntry, ScopeDeclaration, TemporalMetadata,
+            RejectionPolicyMap,
         )
+        from twin_runtime.models.primitives import (
+            DomainEnum, ConflictStyle, ControlOrientation,
+            MergeStrategy, ReliabilityScopeStatus,
+        )
+
+        now = datetime.now(timezone.utc)
+
+        all_domains = [
+            DomainEnum.WORK, DomainEnum.LIFE_PLANNING, DomainEnum.MONEY,
+            DomainEnum.RELATIONSHIPS, DomainEnum.PUBLIC_EXPRESSION,
+        ]
+        domain_heads = []
+        for domain in all_domains:
+            domain_heads.append(DomainHead(
+                domain=domain,
+                head_version="v000",
+                goal_axes=["unknown"],
+                default_priority_order=["unknown"],
+                evidence_weight_profile=EvidenceWeightProfile(
+                    self_report_weight=0.5,
+                    historical_behavior_weight=0.5,
+                    recent_behavior_weight=0.5,
+                    outcome_feedback_weight=0.5,
+                    weight_confidence=0.2,
+                ),
+                head_reliability=0.3,
+                supported_task_types=["general"],
+                last_recalibrated_at=now,
+            ))
+
+        twin = TwinState(
+            id=f"twin-{user_id}",
+            created_at=now,
+            user_id=user_id,
+            state_version="v000-cold-start",
+            active=True,
+            shared_decision_core=SharedDecisionCore(
+                risk_tolerance=0.5,
+                ambiguity_tolerance=0.5,
+                action_threshold=0.5,
+                information_threshold=0.5,
+                reversibility_preference=0.5,
+                regret_sensitivity=0.5,
+                explore_exploit_balance=0.5,
+                conflict_style=ConflictStyle.ADAPTIVE,
+                decision_latency_hours_p50=None,
+                social_proof_dependence=None,
+                evidence_count=len(fragments) if fragments else 0,
+                core_confidence=0.2,
+                last_recalibrated_at=now,
+            ),
+            causal_belief_model=CausalBeliefModel(
+                control_orientation=ControlOrientation.MIXED,
+                effort_vs_system_weight=0.0,
+                relationship_model=None,
+                change_strategy=None,
+                preferred_levers=[],
+                ignored_levers=[],
+                option_visibility_bias=[],
+                causal_confidence=0.2,
+                anchor_cases=[],
+            ),
+            domain_heads=domain_heads,
+            transfer_coefficients=[],
+            reliability_profile=[
+                ReliabilityProfileEntry(
+                    domain=d,
+                    task_type="general",
+                    reliability_score=0.3,
+                    uncertainty_band="0.1-0.5",
+                    evidence_strength=0.2,
+                    scope_status=ReliabilityScopeStatus.WEAKLY_MODELED,
+                    last_updated_at=now,
+                )
+                for d in all_domains
+            ],
+            scope_declaration=ScopeDeclaration(
+                modeled_capabilities=[],
+                non_modeled_capabilities=["all — cold start, no evidence yet"],
+                restricted_use_cases=["financial advice", "medical decisions", "legal counsel"],
+                min_reliability_threshold=0.5,
+                rejection_policy=RejectionPolicyMap(
+                    out_of_scope=MergeStrategy.REFUSE,
+                    borderline=MergeStrategy.DEGRADE,
+                ),
+                user_facing_summary="This twin has minimal data. Most decisions will be declined until more evidence is collected.",
+            ),
+            temporal_metadata=TemporalMetadata(
+                state_valid_from=now,
+                fast_variables=["core_confidence"],
+                slow_variables=["risk_tolerance", "conflict_style"],
+                irreversible_shifts=[],
+                major_life_events=[],
+            ),
+        )
+        return twin
