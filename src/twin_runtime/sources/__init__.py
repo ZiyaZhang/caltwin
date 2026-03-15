@@ -11,9 +11,17 @@ from .document_adapter import DocumentAdapter
 from .notion_adapter import NotionAdapter
 from .gmail_adapter import GmailAdapter
 from .calendar_adapter import CalendarAdapter
+from .evidence_types import (
+    DecisionEvidence, PreferenceEvidence, BehaviorEvidence,
+    ReflectionEvidence, InteractionStyleEvidence, ContextEvidence,
+    migrate_fragment,
+)
 
 __all__ = [
     "SourceAdapter", "EvidenceFragment", "EvidenceType", "SourceRegistry",
     "OpenClawAdapter", "DocumentAdapter", "NotionAdapter",
     "GmailAdapter", "CalendarAdapter",
+    "DecisionEvidence", "PreferenceEvidence", "BehaviorEvidence",
+    "ReflectionEvidence", "InteractionStyleEvidence", "ContextEvidence",
+    "migrate_fragment",
 ]
