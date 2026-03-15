@@ -1,0 +1,1189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/twin-runtime-core-v0.1.1.schema.json",
+  "title": "Twin Runtime Core Objects v0.1.1",
+  "description": "Complete schema bundle for OpenClaw Persona Runtime Adapter core objects.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema_version": {
+      "type": "string",
+      "const": "v0.1.1"
+    }
+  },
+  "required": ["$schema_version"],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Globally unique identifier, e.g. UUID/ULID."
+    },
+
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+
+    "Duration": {
+      "type": "string",
+      "description": "ISO-8601 duration string, e.g. P30D."
+    },
+
+    "ConfidenceScore": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+
+    "WeightScore": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+
+    "BipolarScore": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0 = fully toward first pole, 1 = fully toward second pole."
+    },
+
+    "StringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+
+    "DomainEnumArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DomainEnum"
+      },
+      "description": "Array of domain identifiers constrained to DomainEnum values."
+    },
+
+    "OrdinalTriLevel": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+
+    "DomainEnum": {
+      "type": "string",
+      "enum": [
+        "work",
+        "life_planning",
+        "money",
+        "relationships",
+        "public_expression"
+      ]
+    },
+
+    "ConflictType": {
+      "type": "string",
+      "enum": [
+        "preference",
+        "belief",
+        "evidence_credibility",
+        "mixed"
+      ]
+    },
+
+    "MergeStrategy": {
+      "type": "string",
+      "enum": ["auto_merge", "clarify", "degrade", "refuse"]
+    },
+
+    "DecisionMode": {
+      "type": "string",
+      "enum": ["direct", "clarified", "degraded", "refused"]
+    },
+
+    "ScopeStatus": {
+      "type": "string",
+      "enum": ["in_scope", "borderline", "out_of_scope"]
+    },
+
+    "ReliabilityScopeStatus": {
+      "type": "string",
+      "enum": ["modeled", "weakly_modeled", "unmodeled", "restricted"]
+    },
+
+    "CandidateSourceType": {
+      "type": "string",
+      "enum": [
+        "runtime",
+        "user_correction",
+        "observed_outcome",
+        "simulation_replay",
+        "historical_rebuild"
+      ]
+    },
+
+    "RuntimeEventType": {
+      "type": "string",
+      "enum": [
+        "decision_emitted",
+        "user_rejected",
+        "user_rephrased",
+        "user_corrected",
+        "real_outcome_observed",
+        "simulation_divergence_detected",
+        "high_uncertainty_case",
+        "clarification_invoked"
+      ]
+    },
+
+    "BiasCorrectionAction": {
+      "type": "string",
+      "enum": [
+        "reweight",
+        "dimension_split",
+        "force_compare",
+        "block_automerge",
+        "force_clarification"
+      ]
+    },
+
+    "RejectionPolicyMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "out_of_scope": {
+          "$ref": "#/$defs/MergeStrategy"
+        },
+        "borderline": {
+          "$ref": "#/$defs/MergeStrategy"
+        }
+      },
+      "required": ["out_of_scope", "borderline"]
+    },
+
+    "SharedDecisionCore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "risk_tolerance": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "ambiguity_tolerance": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "action_threshold": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "information_threshold": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "reversibility_preference": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "regret_sensitivity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "explore_exploit_balance": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "conflict_style": {
+          "type": "string",
+          "enum": ["avoidant", "direct", "delayed", "adaptive"]
+        },
+        "social_proof_dependence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "decision_latency_hours_p50": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Median observed decision latency in hours."
+        },
+        "decision_latency_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "core_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_recalibrated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "risk_tolerance",
+        "ambiguity_tolerance",
+        "action_threshold",
+        "information_threshold",
+        "reversibility_preference",
+        "regret_sensitivity",
+        "explore_exploit_balance",
+        "conflict_style",
+        "core_confidence",
+        "evidence_count",
+        "last_recalibrated_at"
+      ]
+    },
+
+    "CausalBeliefModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "control_orientation": {
+          "type": "string",
+          "enum": ["internal", "mixed", "external"]
+        },
+        "effort_vs_system_weight": {
+          "$ref": "#/$defs/BipolarScore",
+          "description": "0 = effort/ability dominant, 1 = system/luck dominant."
+        },
+        "relationship_model": {
+          "type": "string",
+          "enum": ["instrumental", "intrinsic", "mixed"]
+        },
+        "change_strategy": {
+          "type": "string",
+          "enum": ["shape_system", "adapt_to_system", "mixed"]
+        },
+        "preferred_levers": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "ignored_levers": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "option_visibility_bias": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "causal_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "anchor_cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        }
+      },
+      "required": [
+        "control_orientation",
+        "causal_confidence"
+      ]
+    },
+
+    "EvidenceWeightProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Relative importance weights across evidence types. The system normalizes them internally; they do not need to sum to 1.",
+      "properties": {
+        "self_report_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "historical_behavior_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "recent_behavior_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "explicit_reflection_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "public_expression_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "private_expression_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "outcome_feedback_weight": {
+          "$ref": "#/$defs/WeightScore"
+        },
+        "weight_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        }
+      },
+      "required": [
+        "self_report_weight",
+        "historical_behavior_weight",
+        "recent_behavior_weight",
+        "outcome_feedback_weight",
+        "weight_confidence"
+      ]
+    },
+
+    "DomainHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "head_version": {
+          "type": "string"
+        },
+        "goal_axes": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "default_priority_order": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "evidence_weight_profile": {
+          "$ref": "#/$defs/EvidenceWeightProfile"
+        },
+        "head_reliability": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "supported_task_types": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "unsupported_task_types": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "last_recalibrated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "domain",
+        "head_version",
+        "goal_axes",
+        "evidence_weight_profile",
+        "head_reliability",
+        "supported_task_types",
+        "last_recalibrated_at"
+      ]
+    },
+
+    "TransferCoefficient": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from_domain": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "to_domain": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "coefficient": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "supporting_case_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_validated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "from_domain",
+        "to_domain",
+        "coefficient",
+        "confidence",
+        "supporting_case_count",
+        "last_validated_at"
+      ]
+    },
+
+    "ReliabilityProfileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "task_type": {
+          "type": "string"
+        },
+        "reliability_score": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "uncertainty_band": {
+          "type": "string",
+          "description": "Human-readable uncertainty band, e.g. low/medium/high or interval label."
+        },
+        "evidence_strength": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "known_failure_modes": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "scope_status": {
+          "$ref": "#/$defs/ReliabilityScopeStatus"
+        },
+        "last_updated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "domain",
+        "task_type",
+        "reliability_score",
+        "evidence_strength",
+        "scope_status",
+        "last_updated_at"
+      ]
+    },
+
+    "ScopeDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modeled_capabilities": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "non_modeled_capabilities": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "restricted_use_cases": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "min_reliability_threshold": {
+          "$ref": "#/$defs/ConfidenceScore",
+          "description": "Domains with head_reliability >= this threshold are considered publishable/in-scope at runtime."
+        },
+        "rejection_policy": {
+          "$ref": "#/$defs/RejectionPolicyMap"
+        },
+        "user_facing_summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "modeled_capabilities",
+        "non_modeled_capabilities",
+        "restricted_use_cases",
+        "min_reliability_threshold",
+        "rejection_policy",
+        "user_facing_summary"
+      ]
+    },
+
+    "PriorBiasPattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern_id": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "trigger_conditions": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "affected_domains": {
+          "$ref": "#/$defs/DomainEnumArray"
+        },
+        "severity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "supporting_cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "last_observed_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "pattern_id",
+        "description",
+        "trigger_conditions",
+        "affected_domains",
+        "severity",
+        "last_observed_at"
+      ]
+    },
+
+    "BiasCorrectionEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "type": "string"
+        },
+        "bias_pattern_id": {
+          "type": "string"
+        },
+        "target_scope": {
+          "type": "object",
+          "description": "Rule scope: domain/task/situation features.",
+          "additionalProperties": true
+        },
+        "correction_action": {
+          "$ref": "#/$defs/BiasCorrectionAction"
+        },
+        "correction_payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "last_validated_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "validation_window": {
+          "$ref": "#/$defs/Duration"
+        },
+        "expiry_condition": {
+          "type": "string"
+        },
+        "still_active": {
+          "type": "boolean"
+        },
+        "evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_observed_effect": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry_id",
+        "bias_pattern_id",
+        "target_scope",
+        "correction_action",
+        "correction_payload",
+        "created_at",
+        "last_validated_at",
+        "still_active",
+        "evidence_count"
+      ]
+    },
+
+    "TemporalMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state_valid_from": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "state_valid_to": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fast_variables": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "slow_variables": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "irreversible_shifts": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "major_life_events": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "last_version_rollover_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "state_valid_from",
+        "fast_variables",
+        "slow_variables"
+      ]
+    },
+
+    "TwinState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "state_version": {
+          "type": "string"
+        },
+        "shared_decision_core": {
+          "$ref": "#/$defs/SharedDecisionCore"
+        },
+        "causal_belief_model": {
+          "$ref": "#/$defs/CausalBeliefModel"
+        },
+        "domain_heads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DomainHead"
+          },
+          "minItems": 1
+        },
+        "transfer_coefficients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TransferCoefficient"
+          }
+        },
+        "reliability_profile": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReliabilityProfileEntry"
+          },
+          "minItems": 1
+        },
+        "scope_declaration": {
+          "$ref": "#/$defs/ScopeDeclaration"
+        },
+        "prior_bias_profile": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PriorBiasPattern"
+          }
+        },
+        "bias_correction_policy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BiasCorrectionEntry"
+          }
+        },
+        "temporal_metadata": {
+          "$ref": "#/$defs/TemporalMetadata"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "created_at",
+        "user_id",
+        "state_version",
+        "shared_decision_core",
+        "causal_belief_model",
+        "domain_heads",
+        "reliability_profile",
+        "scope_declaration",
+        "temporal_metadata",
+        "active"
+      ]
+    },
+
+    "SituationFeatureVector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reversibility": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "stakes": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "time_pressure": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "identity_load": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "social_exposure": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "dependency_scope": {
+          "type": "string",
+          "enum": ["self", "few_others", "many_others"]
+        },
+        "uncertainty_type": {
+          "type": "string",
+          "enum": ["missing_info", "outcome_uncertainty", "value_conflict", "mixed"]
+        },
+        "controllability": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "option_structure": {
+          "type": "string",
+          "enum": ["choose_existing", "generate_new", "mixed"]
+        },
+        "situation_conflict_type": {
+          "type": "string",
+          "enum": [
+            "efficiency_vs_quality",
+            "stability_vs_growth",
+            "independence_vs_relationship",
+            "reward_vs_risk",
+            "mixed",
+            "other"
+          ],
+          "description": "The inherent tension in the situation itself, distinct from ConflictType which describes inter-head disagreement during merge."
+        }
+      },
+      "required": [
+        "reversibility",
+        "stakes",
+        "uncertainty_type",
+        "controllability",
+        "option_structure"
+      ]
+    },
+
+    "SituationFrame": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "domain_activation_vector": {
+          "type": "object",
+          "description": "Map of domain -> activation weight. Keys should correspond to DomainEnum values.",
+          "additionalProperties": {
+            "$ref": "#/$defs/WeightScore"
+          },
+          "minProperties": 1
+        },
+        "situation_feature_vector": {
+          "$ref": "#/$defs/SituationFeatureVector"
+        },
+        "ambiguity_score": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "clarification_questions": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "scope_status": {
+          "$ref": "#/$defs/ScopeStatus"
+        },
+        "routing_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        }
+      },
+      "required": [
+        "frame_id",
+        "domain_activation_vector",
+        "situation_feature_vector",
+        "ambiguity_score",
+        "scope_status",
+        "routing_confidence"
+      ]
+    },
+
+    "UtilityDecomposition": {
+      "type": "object",
+      "description": "Arbitrary value-axis decomposition. Keys are axes, values are normalized scores or structured labels.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+
+    "HeadAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "head_version": {
+          "type": "string",
+          "description": "Version of the DomainHead used for this assessment, for traceability."
+        },
+        "option_ranking": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "utility_decomposition": {
+          "$ref": "#/$defs/UtilityDecomposition"
+        },
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "used_core_variables": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "used_evidence_types": {
+          "$ref": "#/$defs/StringArray"
+        }
+      },
+      "required": [
+        "domain",
+        "head_version",
+        "option_ranking",
+        "utility_decomposition",
+        "confidence"
+      ]
+    },
+
+    "ConflictReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "report_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "activated_heads": {
+          "$ref": "#/$defs/DomainEnumArray",
+          "description": "Domains whose heads participated in this conflict."
+        },
+        "conflict_types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConflictType"
+          },
+          "minItems": 1
+        },
+        "utility_conflict_axes": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "belief_conflict_axes": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "evidence_conflict_sources": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "resolvable_by_system": {
+          "type": "boolean"
+        },
+        "requires_user_clarification": {
+          "type": "boolean"
+        },
+        "requires_more_evidence": {
+          "type": "boolean"
+        },
+        "final_merge_strategy": {
+          "$ref": "#/$defs/MergeStrategy"
+        }
+      },
+      "required": [
+        "report_id",
+        "activated_heads",
+        "conflict_types",
+        "resolvable_by_system",
+        "requires_user_clarification",
+        "requires_more_evidence",
+        "final_merge_strategy"
+      ]
+    },
+
+    "RuntimeDecisionTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trace_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "twin_state_version": {
+          "type": "string"
+        },
+        "situation_frame_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "activated_domains": {
+          "$ref": "#/$defs/DomainEnumArray"
+        },
+        "head_assessments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeadAssessment"
+          },
+          "minItems": 1
+        },
+        "conflict_report_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "final_decision": {
+          "type": "string"
+        },
+        "decision_mode": {
+          "$ref": "#/$defs/DecisionMode"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "refusal_or_degrade_reason": {
+          "type": "string"
+        },
+        "output_text": {
+          "type": "string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "trace_id",
+        "twin_state_version",
+        "situation_frame_id",
+        "activated_domains",
+        "head_assessments",
+        "final_decision",
+        "decision_mode",
+        "uncertainty",
+        "created_at"
+      ]
+    },
+
+    "RuntimeEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "trace_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "event_type": {
+          "$ref": "#/$defs/RuntimeEventType"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "event_confidence": {
+          "$ref": "#/$defs/ConfidenceScore",
+          "description": "Confidence that this event observation is accurate, not the confidence of the event itself."
+        },
+        "observed_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "event_id",
+        "trace_id",
+        "event_type",
+        "payload",
+        "event_confidence",
+        "observed_at"
+      ]
+    },
+
+    "CandidateCalibrationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "source_type": {
+          "$ref": "#/$defs/CandidateSourceType"
+        },
+        "originating_trace_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "domain_label": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "observed_context": {
+          "type": "string"
+        },
+        "option_set": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "observed_choice": {
+          "type": "string"
+        },
+        "observed_reasoning": {
+          "type": "string"
+        },
+        "stakes": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "reversibility": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "time_pressure": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "ground_truth_confidence": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "promoted_to_calibration_case": {
+          "type": "boolean"
+        },
+        "promotion_reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "created_at",
+        "source_type",
+        "domain_label",
+        "observed_context",
+        "option_set",
+        "observed_choice",
+        "stakes",
+        "reversibility",
+        "ground_truth_confidence",
+        "promoted_to_calibration_case"
+      ]
+    },
+
+    "CalibrationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "domain_label": {
+          "$ref": "#/$defs/DomainEnum"
+        },
+        "task_type": {
+          "type": "string"
+        },
+        "observed_context": {
+          "type": "string"
+        },
+        "option_set": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "actual_choice": {
+          "type": "string"
+        },
+        "actual_reasoning_if_known": {
+          "type": "string"
+        },
+        "stakes": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "reversibility": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "time_pressure": {
+          "$ref": "#/$defs/OrdinalTriLevel"
+        },
+        "confidence_of_ground_truth": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "used_for_calibration": {
+          "type": "boolean",
+          "description": "Whether this case has been consumed by the calibration engine to update TwinState."
+        }
+      },
+      "required": [
+        "case_id",
+        "created_at",
+        "domain_label",
+        "task_type",
+        "observed_context",
+        "option_set",
+        "actual_choice",
+        "stakes",
+        "reversibility",
+        "confidence_of_ground_truth",
+        "used_for_calibration"
+      ]
+    },
+
+    "TwinEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "twin_state_version": {
+          "type": "string"
+        },
+        "calibration_case_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "description": "CalibrationCase IDs used in this evaluation batch."
+        },
+        "choice_similarity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "reasoning_similarity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "style_similarity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "social_similarity": {
+          "$ref": "#/$defs/ConfidenceScore"
+        },
+        "domain_reliability": {
+          "type": "object",
+          "description": "Map of domain -> reliability score.",
+          "additionalProperties": {
+            "$ref": "#/$defs/ConfidenceScore"
+          }
+        },
+        "transfer_reliability": {
+          "type": "object",
+          "description": "Map of 'from_domain->to_domain' -> reliability score.",
+          "additionalProperties": {
+            "$ref": "#/$defs/ConfidenceScore"
+          }
+        },
+        "prior_bias_flags": {
+          "$ref": "#/$defs/StringArray"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "twin_state_version",
+        "calibration_case_ids",
+        "choice_similarity",
+        "domain_reliability",
+        "evaluated_at"
+      ]
+    }
+  }
+}

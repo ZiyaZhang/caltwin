@@ -1,0 +1,149 @@
+{
+  "id": "twin-001",
+  "created_at": "2026-03-15T10:00:00Z",
+  "user_id": "user-ziya",
+  "state_version": "v001",
+  "shared_decision_core": {
+    "risk_tolerance": 0.7,
+    "ambiguity_tolerance": 0.6,
+    "action_threshold": 0.55,
+    "information_threshold": 0.4,
+    "reversibility_preference": 0.65,
+    "regret_sensitivity": 0.5,
+    "explore_exploit_balance": 0.6,
+    "conflict_style": "direct",
+    "social_proof_dependence": 0.3,
+    "decision_latency_hours_p50": 2.5,
+    "decision_latency_confidence": 0.7,
+    "core_confidence": 0.6,
+    "evidence_count": 42,
+    "last_recalibrated_at": "2026-03-15T10:00:00Z"
+  },
+  "causal_belief_model": {
+    "control_orientation": "internal",
+    "effort_vs_system_weight": 0.3,
+    "relationship_model": "mixed",
+    "change_strategy": "shape_system",
+    "preferred_levers": ["technology", "direct_communication", "rapid_iteration"],
+    "ignored_levers": ["political_maneuvering", "passive_waiting"],
+    "option_visibility_bias": ["build_new", "automate", "delegate"],
+    "causal_confidence": 0.55,
+    "anchor_cases": []
+  },
+  "domain_heads": [
+    {
+      "domain": "work",
+      "head_version": "v001",
+      "goal_axes": ["impact", "learning", "efficiency", "autonomy"],
+      "default_priority_order": ["impact", "learning", "efficiency", "autonomy"],
+      "evidence_weight_profile": {
+        "self_report_weight": 0.3,
+        "historical_behavior_weight": 0.8,
+        "recent_behavior_weight": 0.9,
+        "explicit_reflection_weight": 0.5,
+        "outcome_feedback_weight": 0.7,
+        "weight_confidence": 0.65
+      },
+      "head_reliability": 0.7,
+      "supported_task_types": ["prioritization", "tool_selection", "collaboration_style", "project_scoping"],
+      "unsupported_task_types": ["salary_negotiation"],
+      "last_recalibrated_at": "2026-03-15T10:00:00Z"
+    },
+    {
+      "domain": "life_planning",
+      "head_version": "v001",
+      "goal_axes": ["growth", "stability", "freedom", "meaning"],
+      "default_priority_order": ["growth", "freedom", "meaning", "stability"],
+      "evidence_weight_profile": {
+        "self_report_weight": 0.6,
+        "historical_behavior_weight": 0.5,
+        "recent_behavior_weight": 0.4,
+        "outcome_feedback_weight": 0.3,
+        "weight_confidence": 0.35
+      },
+      "head_reliability": 0.35,
+      "supported_task_types": ["career_direction", "city_choice"],
+      "unsupported_task_types": ["relationship_advice", "health_decisions"],
+      "last_recalibrated_at": "2026-03-15T10:00:00Z"
+    }
+  ],
+  "transfer_coefficients": [
+    {
+      "from_domain": "work",
+      "to_domain": "life_planning",
+      "coefficient": 0.55,
+      "confidence": 0.4,
+      "supporting_case_count": 3,
+      "last_validated_at": "2026-03-15T10:00:00Z"
+    }
+  ],
+  "reliability_profile": [
+    {
+      "domain": "work",
+      "task_type": "prioritization",
+      "reliability_score": 0.75,
+      "uncertainty_band": "medium",
+      "evidence_strength": 0.7,
+      "known_failure_modes": ["over-indexes on novelty when fatigued"],
+      "scope_status": "modeled",
+      "last_updated_at": "2026-03-15T10:00:00Z"
+    },
+    {
+      "domain": "work",
+      "task_type": "tool_selection",
+      "reliability_score": 0.7,
+      "evidence_strength": 0.65,
+      "scope_status": "modeled",
+      "last_updated_at": "2026-03-15T10:00:00Z"
+    },
+    {
+      "domain": "life_planning",
+      "task_type": "career_direction",
+      "reliability_score": 0.35,
+      "uncertainty_band": "high",
+      "evidence_strength": 0.3,
+      "known_failure_modes": ["insufficient life-anchor data", "transfer from work may not hold"],
+      "scope_status": "weakly_modeled",
+      "last_updated_at": "2026-03-15T10:00:00Z"
+    }
+  ],
+  "scope_declaration": {
+    "modeled_capabilities": [
+      "preference_selection",
+      "decision_style",
+      "reasoning_frame",
+      "limited_social_response"
+    ],
+    "non_modeled_capabilities": [
+      "live_emotion_state",
+      "aesthetic_taste_full_fidelity",
+      "intimate_tone_replication",
+      "verbatim_autobiographical_memory",
+      "identity_performance_in_private",
+      "trauma_sensitive_responses"
+    ],
+    "restricted_use_cases": [
+      "simulate_private_conversations",
+      "make_binding_commitments",
+      "high_confidence_in_unmodeled_domains"
+    ],
+    "min_reliability_threshold": 0.5,
+    "rejection_policy": {
+      "out_of_scope": "refuse",
+      "borderline": "degrade"
+    },
+    "user_facing_summary": "This twin models decision-making style and preference patterns in work and (weakly) life planning domains. It does NOT model emotions, aesthetics, intimate communication, or autobiographical memory."
+  },
+  "prior_bias_profile": [],
+  "bias_correction_policy": [],
+  "temporal_metadata": {
+    "state_valid_from": "2026-03-15T10:00:00Z",
+    "state_valid_to": null,
+    "fast_variables": ["explore_exploit_balance", "social_proof_dependence"],
+    "slow_variables": ["risk_tolerance", "conflict_style", "control_orientation"],
+    "irreversible_shifts": [],
+    "major_life_events": []
+  },
+  "active": true,
+  "notes": "Initial bootstrap from 42 work micro-decisions + 3 life-anchor retrospectives."
+}
