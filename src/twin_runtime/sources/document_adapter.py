@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .base import EvidenceFragment, EvidenceType, SourceAdapter
+from .evidence_types import ContextEvidence
 
 
 # Supported file extensions and their readers
@@ -61,21 +62,24 @@ class DocumentAdapter(SourceAdapter):
             if not content.strip():
                 continue
 
-            fragments.append(EvidenceFragment(
+            fragments.append(ContextEvidence(
                 source_type=self.source_type,
                 source_id=str(file_path),
-                evidence_type=EvidenceType.CONTEXT,
-                timestamp=mtime,
+                occurred_at=mtime,
+                valid_from=mtime,
                 summary=f"Document: {file_path.name}",
                 raw_excerpt=content[:3000],
+                confidence=0.75,
+                extraction_method="rule_based",
+                user_id="user-default",
+                context_category="document",
+                description=f"Document: {file_path.name}",
                 structured_data={
                     "file": str(file_path),
                     "extension": file_path.suffix,
                     "size_bytes": file_path.stat().st_size,
                     "needs_llm_analysis": True,
                 },
-                confidence=0.75,
-                extraction_method="rule_based",
             ))
         return fragments
 

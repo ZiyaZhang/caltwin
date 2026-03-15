@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "tools"))
 
 from .base import EvidenceFragment, EvidenceType, SourceAdapter
+from .evidence_types import DecisionEvidence, PreferenceEvidence, ReflectionEvidence, ContextEvidence
 from ..models.primitives import DomainEnum
 
 
@@ -95,23 +96,65 @@ class NotionAdapter(SourceAdapter):
         # Classify evidence type based on content signals
         ev_type = self._classify_content(title, text)
 
-        return [EvidenceFragment(
+        ts = edited or created or datetime.now(timezone.utc)
+        base_kwargs = dict(
             source_type=self.source_type,
             source_id=f"notion-page:{page_id}",
-            evidence_type=ev_type,
-            timestamp=edited or created or datetime.now(timezone.utc),
+            occurred_at=ts,
+            valid_from=ts,
             summary=f"Notion page: {title}",
             raw_excerpt=text[:2000] if text else title,
-            structured_data={
-                "page_id": page_id,
-                "title": title,
-                "content_length": len(text),
-                "created": str(created) if created else None,
-                "needs_llm_analysis": len(text) > 200,
-            },
             confidence=0.7,
             extraction_method="rule_based",
-        )]
+            user_id="user-default",
+        )
+
+        if ev_type == EvidenceType.DECISION:
+            return [DecisionEvidence(
+                **base_kwargs,
+                option_set=[],
+                chosen="",
+                reasoning=text[:200] if text else "",
+                structured_data={
+                    "page_id": page_id, "title": title,
+                    "content_length": len(text),
+                    "needs_llm_analysis": len(text) > 200,
+                },
+            )]
+        elif ev_type == EvidenceType.REFLECTION:
+            return [ReflectionEvidence(
+                **base_kwargs,
+                topic=title,
+                insight=text[:300] if text else title,
+                structured_data={
+                    "page_id": page_id, "title": title,
+                    "content_length": len(text),
+                    "needs_llm_analysis": len(text) > 200,
+                },
+            )]
+        elif ev_type == EvidenceType.PREFERENCE:
+            return [PreferenceEvidence(
+                **base_kwargs,
+                dimension=title[:50],
+                direction="expressed",
+                structured_data={
+                    "page_id": page_id, "title": title,
+                    "content_length": len(text),
+                    "needs_llm_analysis": len(text) > 200,
+                },
+            )]
+        else:
+            return [ContextEvidence(
+                **base_kwargs,
+                context_category="notion_page",
+                description=f"Notion page: {title}",
+                structured_data={
+                    "page_id": page_id, "title": title,
+                    "content_length": len(text),
+                    "created": str(created) if created else None,
+                    "needs_llm_analysis": len(text) > 200,
+                },
+            )]
 
     def _process_database(self, db: dict, r: Any, since: Optional[datetime]) -> List[EvidenceFragment]:
         db_id = db["id"]
@@ -126,12 +169,17 @@ class NotionAdapter(SourceAdapter):
         if not rows:
             return []
 
-        return [EvidenceFragment(
+        return [ContextEvidence(
             source_type=self.source_type,
             source_id=f"notion-db:{db_id}",
-            evidence_type=EvidenceType.CONTEXT,
-            timestamp=datetime.now(timezone.utc),
+            occurred_at=datetime.now(timezone.utc),
+            valid_from=datetime.now(timezone.utc),
             summary=f"Notion database: {title} ({len(rows)} rows)",
+            confidence=0.6,
+            extraction_method="api_structured",
+            user_id="user-default",
+            context_category="database",
+            description=f"Notion database: {title}",
             structured_data={
                 "database_id": db_id,
                 "title": title,
@@ -139,8 +187,6 @@ class NotionAdapter(SourceAdapter):
                 "row_titles": [r.extract_page_title(row) for row in rows[:10]],
                 "needs_llm_analysis": True,
             },
-            confidence=0.6,
-            extraction_method="api_structured",
         )]
 
     @staticmethod
