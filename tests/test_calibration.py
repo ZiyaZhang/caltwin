@@ -157,7 +157,7 @@ class TestStateUpdater:
 
         # Should have moved toward 0.95
         assert updated.domain_heads[0].head_reliability > original_work_reliability
-        assert updated.state_version == "v002"
+        assert updated.state_version == "v003"  # v002 + 1
         assert updated.shared_decision_core.evidence_count == twin.shared_decision_core.evidence_count + 4
 
     def test_apply_evaluation_preserves_original(self):

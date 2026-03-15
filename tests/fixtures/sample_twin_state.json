@@ -2,109 +2,158 @@
   "id": "twin-001",
   "created_at": "2026-03-15T10:00:00Z",
   "user_id": "user-ziya",
-  "state_version": "v001",
+  "state_version": "v002",
   "shared_decision_core": {
-    "risk_tolerance": 0.7,
+    "risk_tolerance": 0.65,
     "ambiguity_tolerance": 0.6,
     "action_threshold": 0.55,
     "information_threshold": 0.4,
     "reversibility_preference": 0.65,
-    "regret_sensitivity": 0.5,
-    "explore_exploit_balance": 0.6,
-    "conflict_style": "direct",
-    "social_proof_dependence": 0.3,
+    "regret_sensitivity": 0.6,
+    "explore_exploit_balance": 0.55,
+    "conflict_style": "avoidant",
+    "social_proof_dependence": 0.35,
     "decision_latency_hours_p50": 2.5,
     "decision_latency_confidence": 0.7,
-    "core_confidence": 0.6,
-    "evidence_count": 42,
-    "last_recalibrated_at": "2026-03-15T10:00:00Z"
+    "core_confidence": 0.65,
+    "evidence_count": 62,
+    "last_recalibrated_at": "2026-03-15T12:00:00Z"
   },
   "causal_belief_model": {
     "control_orientation": "internal",
     "effort_vs_system_weight": 0.3,
     "relationship_model": "mixed",
     "change_strategy": "shape_system",
-    "preferred_levers": ["technology", "direct_communication", "rapid_iteration"],
-    "ignored_levers": ["political_maneuvering", "passive_waiting"],
-    "option_visibility_bias": ["build_new", "automate", "delegate"],
-    "causal_confidence": 0.55,
-    "anchor_cases": []
+    "preferred_levers": ["technology", "ecosystem_leverage", "rapid_iteration", "ai_augmentation"],
+    "ignored_levers": ["political_maneuvering", "passive_waiting", "public_confrontation"],
+    "option_visibility_bias": ["leverage_existing_platform", "ai_first", "low_overhead"],
+    "causal_confidence": 0.6,
+    "anchor_cases": [
+      "chose_tencent_over_minimax_regretted",
+      "chose_openclaw_ecosystem_over_standalone",
+      "chose_python_for_familiarity"
+    ]
   },
   "domain_heads": [
     {
       "domain": "work",
-      "head_version": "v001",
-      "goal_axes": ["impact", "learning", "efficiency", "autonomy"],
-      "default_priority_order": ["impact", "learning", "efficiency", "autonomy"],
+      "head_version": "v002",
+      "goal_axes": ["leverage", "learning", "efficiency", "ecosystem_fit"],
+      "default_priority_order": ["leverage", "ecosystem_fit", "learning", "efficiency"],
       "evidence_weight_profile": {
         "self_report_weight": 0.3,
         "historical_behavior_weight": 0.8,
         "recent_behavior_weight": 0.9,
         "explicit_reflection_weight": 0.5,
         "outcome_feedback_weight": 0.7,
-        "weight_confidence": 0.65
+        "weight_confidence": 0.7
       },
-      "head_reliability": 0.7,
+      "head_reliability": 0.72,
       "supported_task_types": ["prioritization", "tool_selection", "collaboration_style", "project_scoping"],
       "unsupported_task_types": ["salary_negotiation"],
-      "last_recalibrated_at": "2026-03-15T10:00:00Z"
+      "last_recalibrated_at": "2026-03-15T12:00:00Z"
     },
     {
       "domain": "life_planning",
-      "head_version": "v001",
-      "goal_axes": ["growth", "stability", "freedom", "meaning"],
-      "default_priority_order": ["growth", "freedom", "meaning", "stability"],
+      "head_version": "v002",
+      "goal_axes": ["growth", "frontier_access", "freedom", "upside_potential"],
+      "default_priority_order": ["frontier_access", "growth", "upside_potential", "freedom"],
       "evidence_weight_profile": {
         "self_report_weight": 0.6,
         "historical_behavior_weight": 0.5,
-        "recent_behavior_weight": 0.4,
-        "outcome_feedback_weight": 0.3,
-        "weight_confidence": 0.35
+        "recent_behavior_weight": 0.7,
+        "outcome_feedback_weight": 0.4,
+        "weight_confidence": 0.5
       },
-      "head_reliability": 0.35,
+      "head_reliability": 0.55,
       "supported_task_types": ["career_direction", "city_choice"],
       "unsupported_task_types": ["relationship_advice", "health_decisions"],
-      "last_recalibrated_at": "2026-03-15T10:00:00Z"
+      "last_recalibrated_at": "2026-03-15T12:00:00Z"
+    },
+    {
+      "domain": "money",
+      "head_version": "v001",
+      "goal_axes": ["growth_potential", "diversification", "low_maintenance", "tech_alignment"],
+      "default_priority_order": ["growth_potential", "tech_alignment", "low_maintenance", "diversification"],
+      "evidence_weight_profile": {
+        "self_report_weight": 0.5,
+        "historical_behavior_weight": 0.6,
+        "recent_behavior_weight": 0.7,
+        "outcome_feedback_weight": 0.5,
+        "weight_confidence": 0.4
+      },
+      "head_reliability": 0.5,
+      "supported_task_types": ["asset_allocation", "investment_style"],
+      "unsupported_task_types": ["tax_planning", "insurance"],
+      "last_recalibrated_at": "2026-03-15T12:00:00Z"
     }
   ],
   "transfer_coefficients": [
     {
       "from_domain": "work",
       "to_domain": "life_planning",
-      "coefficient": 0.55,
-      "confidence": 0.4,
+      "coefficient": 0.65,
+      "confidence": 0.5,
+      "supporting_case_count": 5,
+      "last_validated_at": "2026-03-15T12:00:00Z"
+    },
+    {
+      "from_domain": "work",
+      "to_domain": "money",
+      "coefficient": 0.45,
+      "confidence": 0.35,
       "supporting_case_count": 3,
-      "last_validated_at": "2026-03-15T10:00:00Z"
+      "last_validated_at": "2026-03-15T12:00:00Z"
     }
   ],
   "reliability_profile": [
     {
       "domain": "work",
       "task_type": "prioritization",
-      "reliability_score": 0.75,
+      "reliability_score": 0.72,
       "uncertainty_band": "medium",
       "evidence_strength": 0.7,
-      "known_failure_modes": ["over-indexes on novelty when fatigued"],
+      "known_failure_modes": ["misses company-specific context like existing assets", "over-indexes on novelty"],
       "scope_status": "modeled",
-      "last_updated_at": "2026-03-15T10:00:00Z"
+      "last_updated_at": "2026-03-15T12:00:00Z"
     },
     {
       "domain": "work",
       "task_type": "tool_selection",
-      "reliability_score": 0.7,
-      "evidence_strength": 0.65,
+      "reliability_score": 0.75,
+      "evidence_strength": 0.7,
       "scope_status": "modeled",
-      "last_updated_at": "2026-03-15T10:00:00Z"
+      "last_updated_at": "2026-03-15T12:00:00Z"
+    },
+    {
+      "domain": "work",
+      "task_type": "collaboration_style",
+      "reliability_score": 0.5,
+      "uncertainty_band": "high",
+      "evidence_strength": 0.5,
+      "known_failure_modes": ["defaults to direct/public when user is actually indirect/internal", "misses risk aversion in social exposure"],
+      "scope_status": "modeled",
+      "last_updated_at": "2026-03-15T12:00:00Z"
     },
     {
       "domain": "life_planning",
       "task_type": "career_direction",
-      "reliability_score": 0.35,
+      "reliability_score": 0.55,
+      "uncertainty_band": "medium",
+      "evidence_strength": 0.5,
+      "known_failure_modes": ["insufficient life-anchor data", "misses risk aversion vs upside tension"],
+      "scope_status": "modeled",
+      "last_updated_at": "2026-03-15T12:00:00Z"
+    },
+    {
+      "domain": "money",
+      "task_type": "asset_allocation",
+      "reliability_score": 0.5,
       "uncertainty_band": "high",
-      "evidence_strength": 0.3,
-      "known_failure_modes": ["insufficient life-anchor data", "transfer from work may not hold"],
+      "evidence_strength": 0.35,
+      "known_failure_modes": ["limited investment history data", "new domain head"],
       "scope_status": "weakly_modeled",
-      "last_updated_at": "2026-03-15T10:00:00Z"
+      "last_updated_at": "2026-03-15T12:00:00Z"
     }
   ],
   "scope_declaration": {
@@ -132,18 +181,28 @@
       "out_of_scope": "refuse",
       "borderline": "degrade"
     },
-    "user_facing_summary": "This twin models decision-making style and preference patterns in work and (weakly) life planning domains. It does NOT model emotions, aesthetics, intimate communication, or autobiographical memory."
+    "user_facing_summary": "This twin models decision-making style and preference patterns in work, life planning, and (weakly) money domains. Key traits: prefers leveraging existing ecosystems over building from scratch, indirect conflict style, AI-augmented workflows, favors upside potential over safety. Does NOT model emotions, aesthetics, intimate communication, or autobiographical memory."
   },
-  "prior_bias_profile": [],
+  "prior_bias_profile": [
+    {
+      "pattern_id": "bias-001",
+      "description": "LLM defaults to direct/confrontational style but user is actually avoidant/indirect",
+      "trigger_conditions": ["conflict_scenario", "social_exposure_decision"],
+      "affected_domains": ["work"],
+      "severity": 0.7,
+      "supporting_cases": ["interview-013", "interview-006"],
+      "last_observed_at": "2026-03-15T12:00:00Z"
+    }
+  ],
   "bias_correction_policy": [],
   "temporal_metadata": {
-    "state_valid_from": "2026-03-15T10:00:00Z",
+    "state_valid_from": "2026-03-15T12:00:00Z",
     "state_valid_to": null,
     "fast_variables": ["explore_exploit_balance", "social_proof_dependence"],
     "slow_variables": ["risk_tolerance", "conflict_style", "control_orientation"],
-    "irreversible_shifts": [],
-    "major_life_events": []
+    "irreversible_shifts": ["investment_style_from_active_to_passive"],
+    "major_life_events": ["joined_tencent_2025", "regret_not_staying_at_minimax"]
   },
   "active": true,
-  "notes": "Initial bootstrap from 42 work micro-decisions + 3 life-anchor retrospectives."
+  "notes": "v002: calibrated from 20-case interview. Key corrections: conflict_style direct→avoidant, added money head, option_visibility_bias updated to ecosystem_leverage, goal_axes refined to match observed patterns (leverage > impact, frontier_access > stability)."
 }

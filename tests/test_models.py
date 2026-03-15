@@ -43,14 +43,14 @@ class TestTwinStateFromFixture:
     def test_loads_from_fixture(self, sample_twin):
         assert sample_twin.id == "twin-001"
         assert sample_twin.user_id == "user-ziya"
-        assert sample_twin.state_version == "v001"
+        assert sample_twin.state_version == "v002"
         assert sample_twin.active is True
 
     def test_shared_decision_core(self, sample_twin):
         core = sample_twin.shared_decision_core
-        assert core.risk_tolerance == 0.7
-        assert core.conflict_style == ConflictStyle.DIRECT
-        assert core.evidence_count == 42
+        assert core.risk_tolerance == 0.65
+        assert core.conflict_style == ConflictStyle.AVOIDANT
+        assert core.evidence_count == 62
 
     def test_causal_belief_model(self, sample_twin):
         cbm = sample_twin.causal_belief_model
@@ -59,25 +59,29 @@ class TestTwinStateFromFixture:
         assert "technology" in cbm.preferred_levers
 
     def test_domain_heads(self, sample_twin):
-        assert len(sample_twin.domain_heads) == 2
+        assert len(sample_twin.domain_heads) == 3
         work = sample_twin.domain_heads[0]
         assert work.domain == DomainEnum.WORK
-        assert work.head_reliability == 0.7
+        assert work.head_reliability == 0.72
         life = sample_twin.domain_heads[1]
         assert life.domain == DomainEnum.LIFE_PLANNING
-        assert life.head_reliability == 0.35
+        assert life.head_reliability == 0.55
+        money = sample_twin.domain_heads[2]
+        assert money.domain == DomainEnum.MONEY
+        assert money.head_reliability == 0.5
 
     def test_valid_domains(self, sample_twin):
         valid = sample_twin.valid_domains()
         assert DomainEnum.WORK in valid
-        assert DomainEnum.LIFE_PLANNING not in valid  # 0.35 < 0.5 threshold
+        assert DomainEnum.LIFE_PLANNING in valid  # 0.55 >= 0.5 threshold
+        assert DomainEnum.MONEY in valid  # 0.5 >= 0.5 threshold
 
     def test_transfer_coefficients(self, sample_twin):
-        assert len(sample_twin.transfer_coefficients) == 1
+        assert len(sample_twin.transfer_coefficients) == 2
         tc = sample_twin.transfer_coefficients[0]
         assert tc.from_domain == DomainEnum.WORK
         assert tc.to_domain == DomainEnum.LIFE_PLANNING
-        assert tc.coefficient == 0.55
+        assert tc.coefficient == 0.65
 
     def test_scope_declaration(self, sample_twin):
         sd = sample_twin.scope_declaration
