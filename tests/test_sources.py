@@ -60,6 +60,52 @@ class TestEvidenceFragment:
         )
         assert f.domain_hint == DomainEnum.WORK
 
+    def test_fragment_temporal_fields(self):
+        now = datetime.now(timezone.utc)
+        f = EvidenceFragment(
+            source_type="test",
+            source_id="t-1",
+            evidence_type=EvidenceType.PREFERENCE,
+            occurred_at=now,
+            valid_from=now,
+            summary="Test",
+            confidence=0.8,
+            user_id="user-test",
+        )
+        assert f.occurred_at == now
+        assert f.valid_from == now
+        assert f.valid_until is None
+        assert f.user_id == "user-test"
+
+    def test_fragment_backward_compat_timestamp(self):
+        """Legacy 'timestamp' field should still work via occurred_at."""
+        now = datetime.now(timezone.utc)
+        f = EvidenceFragment(
+            source_type="test",
+            source_id="t-1",
+            evidence_type=EvidenceType.PREFERENCE,
+            occurred_at=now,
+            valid_from=now,
+            summary="Test",
+            confidence=0.8,
+            user_id="user-default",
+        )
+        assert f.occurred_at == now
+
+    def test_fragment_content_hash_populated(self):
+        f = EvidenceFragment(
+            source_type="test",
+            source_id="t-1",
+            evidence_type=EvidenceType.PREFERENCE,
+            occurred_at=datetime.now(timezone.utc),
+            valid_from=datetime.now(timezone.utc),
+            summary="Test preference",
+            confidence=0.8,
+            user_id="user-test",
+        )
+        assert isinstance(f.content_hash, str)
+        assert len(f.content_hash) > 0
+
 
 class TestSourceRegistry:
     def test_register_and_list(self):

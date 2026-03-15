@@ -8,13 +8,14 @@ Architecture inspired by:
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..models.primitives import DomainEnum, OrdinalTriLevel, confidence_field
 
@@ -33,13 +34,22 @@ class EvidenceFragment(BaseModel):
     """Atomic unit of evidence extracted from any data source.
 
     This is the universal interface between source adapters and the persona compiler.
-    Every adapter produces these; the compiler consumes them.
     """
+
     fragment_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str = Field(default="user-default", description="Owner user ID for multi-user isolation")
     source_type: str = Field(description="Adapter that produced this: 'openclaw', 'notion', 'gmail', etc.")
     source_id: str = Field(description="Unique ID within the source (file path, message ID, page ID, etc.)")
     evidence_type: EvidenceType
-    timestamp: datetime = Field(description="When this evidence was observed/created")
+
+    # Temporal triple
+    occurred_at: datetime = Field(description="When the event happened")
+    valid_from: datetime = Field(description="When this evidence starts being relevant")
+    valid_until: Optional[datetime] = Field(
+        default=None,
+        description="When this evidence stops being relevant (None = still valid)"
+    )
+
     domain_hint: Optional[DomainEnum] = Field(
         default=None,
         description="Domain this evidence likely belongs to. None = let compiler decide."
@@ -53,7 +63,7 @@ class EvidenceFragment(BaseModel):
     )
     structured_data: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Structured extraction: options, choice, reasoning, etc."
+        description="Structured extraction. Prefer typed subclass fields over this."
     )
 
     # Quality signals
@@ -71,6 +81,35 @@ class EvidenceFragment(BaseModel):
         default="manual",
         description="How this was extracted: 'manual', 'llm_extraction', 'rule_based', 'api_structured'."
     )
+
+    # Dedup
+    content_hash: str = Field(
+        default="",
+        description="Semantic fingerprint for cross-source dedup. Auto-computed if empty."
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_timestamp(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "timestamp" in data and "occurred_at" not in data:
+            data["occurred_at"] = data.pop("timestamp")
+            if "valid_from" not in data:
+                data["valid_from"] = data["occurred_at"]
+        return data
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.content_hash:
+            self.content_hash = self._compute_content_hash()
+
+    def _compute_content_hash(self) -> str:
+        """Compute semantic fingerprint. Subclasses override for type-specific hashing."""
+        parts = [
+            self.evidence_type.value,
+            self.domain_hint.value if self.domain_hint else "",
+            self.summary[:100],
+        ]
+        raw = "|".join(parts)
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 class SourceAdapter(ABC):
