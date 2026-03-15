@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .base import EvidenceFragment, EvidenceType, SourceAdapter
+from .base import EvidenceFragment, SourceAdapter
+from .evidence_types import ContextEvidence, PreferenceEvidence, BehaviorEvidence
 from ..models.primitives import DomainEnum
 
 
@@ -68,16 +69,19 @@ class OpenClawAdapter(SourceAdapter):
             if not content.strip():
                 continue
             mtime = datetime.fromtimestamp(claude_md.stat().st_mtime, tz=timezone.utc)
-            fragments.append(EvidenceFragment(
+            fragments.append(ContextEvidence(
                 source_type=self.source_type,
                 source_id=str(claude_md),
-                evidence_type=EvidenceType.CONTEXT,
-                timestamp=mtime,
+                occurred_at=mtime,
+                valid_from=mtime,
                 summary=f"Project instructions from {claude_md.name}",
                 raw_excerpt=content[:2000],
-                structured_data={"file": str(claude_md), "type": "claude_md"},
                 confidence=0.8,
                 extraction_method="rule_based",
+                user_id="user-default",
+                context_category="project_instructions",
+                description=f"CLAUDE.md at {claude_md}",
+                structured_data={"file": str(claude_md), "type": "claude_md"},
             ))
         return fragments
 
@@ -109,28 +113,46 @@ class OpenClawAdapter(SourceAdapter):
                 meta = self._parse_memory_frontmatter(content)
                 mem_type = meta.get("type", "unknown")
 
-                ev_type = {
-                    "user": EvidenceType.CONTEXT,
-                    "feedback": EvidenceType.PREFERENCE,
-                    "project": EvidenceType.CONTEXT,
-                    "reference": EvidenceType.CONTEXT,
-                }.get(mem_type, EvidenceType.PREFERENCE)
-
-                fragments.append(EvidenceFragment(
-                    source_type=self.source_type,
-                    source_id=str(mem_file),
-                    evidence_type=ev_type,
-                    timestamp=mtime,
-                    summary=meta.get("description", f"Memory: {mem_file.stem}"),
-                    raw_excerpt=content[:1500],
-                    structured_data={
-                        "file": str(mem_file),
-                        "memory_type": mem_type,
-                        "memory_name": meta.get("name", mem_file.stem),
-                    },
-                    confidence=0.85,
-                    extraction_method="rule_based",
-                ))
+                # Map memory types to evidence classes
+                if mem_type == "feedback":
+                    fragments.append(PreferenceEvidence(
+                        source_type=self.source_type,
+                        source_id=str(mem_file),
+                        occurred_at=mtime,
+                        valid_from=mtime,
+                        summary=meta.get("description", f"Memory: {mem_file.stem}"),
+                        raw_excerpt=content[:1500],
+                        confidence=0.85,
+                        extraction_method="rule_based",
+                        user_id="user-default",
+                        dimension=meta.get("name", mem_file.stem),
+                        direction="configured",
+                        structured_data={
+                            "file": str(mem_file),
+                            "memory_type": mem_type,
+                            "memory_name": meta.get("name", mem_file.stem),
+                        },
+                    ))
+                else:
+                    # user, project, reference → ContextEvidence
+                    fragments.append(ContextEvidence(
+                        source_type=self.source_type,
+                        source_id=str(mem_file),
+                        occurred_at=mtime,
+                        valid_from=mtime,
+                        summary=meta.get("description", f"Memory: {mem_file.stem}"),
+                        raw_excerpt=content[:1500],
+                        confidence=0.85,
+                        extraction_method="rule_based",
+                        user_id="user-default",
+                        context_category=mem_type,
+                        description=meta.get("description", f"Memory: {mem_file.stem}"),
+                        structured_data={
+                            "file": str(mem_file),
+                            "memory_type": mem_type,
+                            "memory_name": meta.get("name", mem_file.stem),
+                        },
+                    ))
         return fragments
 
     # --- Settings ---
@@ -145,15 +167,18 @@ class OpenClawAdapter(SourceAdapter):
             return []
 
         mtime = datetime.fromtimestamp(settings_path.stat().st_mtime, tz=timezone.utc)
-        return [EvidenceFragment(
+        return [PreferenceEvidence(
             source_type=self.source_type,
             source_id=str(settings_path),
-            evidence_type=EvidenceType.PREFERENCE,
-            timestamp=mtime,
+            occurred_at=mtime,
+            valid_from=mtime,
             summary="User's Claude Code settings and preferences",
-            structured_data={"settings": settings},
             confidence=0.7,
             extraction_method="api_structured",
+            user_id="user-default",
+            dimension="tool_settings",
+            direction="configured",
+            structured_data={"settings": settings},
         )]
 
     # --- Transcripts ---
@@ -176,20 +201,23 @@ class OpenClawAdapter(SourceAdapter):
 
             # Don't read full transcript — just record it exists for later analysis
             file_size = jsonl_file.stat().st_size
-            fragments.append(EvidenceFragment(
+            fragments.append(BehaviorEvidence(
                 source_type=self.source_type,
                 source_id=str(jsonl_file),
-                evidence_type=EvidenceType.BEHAVIOR,
-                timestamp=mtime,
+                occurred_at=mtime,
+                valid_from=mtime,
                 summary=f"Conversation transcript ({file_size // 1024}KB)",
-                structured_data={
+                confidence=0.5,
+                extraction_method="rule_based",
+                user_id="user-default",
+                action_type="conversation",
+                pattern=f"Transcript {jsonl_file.name}",
+                structured_metrics={
                     "file": str(jsonl_file),
                     "size_bytes": file_size,
                     "type": "transcript",
                     "needs_llm_analysis": True,
                 },
-                confidence=0.5,  # Low until analyzed
-                extraction_method="rule_based",
             ))
         return fragments
 

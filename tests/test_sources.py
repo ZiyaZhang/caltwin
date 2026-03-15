@@ -170,6 +170,17 @@ class TestOpenClawAdapter:
             meta = adapter.get_source_metadata()
             assert meta["source_type"] == "openclaw"
 
+    def test_scan_returns_typed_fragments(self):
+        from twin_runtime.sources.evidence_types import ContextEvidence
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "CLAUDE.md").write_text("# Project instructions\nUse Python 3.9+")
+            adapter = OpenClawAdapter(tmpdir)
+            fragments = adapter.scan()
+            assert len(fragments) >= 1
+            claude_frags = [f for f in fragments if "CLAUDE" in f.source_id or "claude" in f.source_id.lower()]
+            assert len(claude_frags) >= 1
+            assert isinstance(claude_frags[0], ContextEvidence)
+
 
 class TestDocumentAdapter:
     def test_scan_files(self):
