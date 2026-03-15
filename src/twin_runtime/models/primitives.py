@@ -103,8 +103,9 @@ class ReliabilityScopeStatus(str, Enum):
 
 
 class CandidateSourceType(str, Enum):
-    RUNTIME = "runtime"
+    RUNTIME_TRACE = "runtime_trace"
     USER_CORRECTION = "user_correction"
+    USER_REFLECTION = "user_reflection"
     OBSERVED_OUTCOME = "observed_outcome"
     SIMULATION_REPLAY = "simulation_replay"
     HISTORICAL_REBUILD = "historical_rebuild"
@@ -112,6 +113,8 @@ class CandidateSourceType(str, Enum):
 
 class RuntimeEventType(str, Enum):
     DECISION_EMITTED = "decision_emitted"
+    OUTCOME_OBSERVED = "outcome_observed"
+    DISAGREEMENT_FLAGGED = "disagreement_flagged"
     USER_REJECTED = "user_rejected"
     USER_REPHRASED = "user_rephrased"
     USER_CORRECTED = "user_corrected"
