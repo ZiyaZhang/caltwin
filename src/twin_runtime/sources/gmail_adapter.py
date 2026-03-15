@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .base import EvidenceFragment, EvidenceType, SourceAdapter
+from .evidence_types import DecisionEvidence
 from ..models.primitives import DomainEnum
 
 
@@ -140,13 +141,20 @@ class GmailAdapter(SourceAdapter):
         if self._read_body:
             body_excerpt = self._extract_body(msg)[:1000]
 
-        return EvidenceFragment(
+        return DecisionEvidence(
             source_type=self.source_type,
             source_id=f"gmail:{msg_id}",
-            evidence_type=EvidenceType.DECISION,
-            timestamp=timestamp,
+            occurred_at=timestamp,
+            valid_from=timestamp,
             summary=f"Email: {subject[:100]}",
             raw_excerpt=body_excerpt if body_excerpt else snippet[:500],
+            confidence=0.6,  # Email context is noisy
+            extraction_method="rule_based",
+            user_id="user-default",
+            # Typed fields
+            option_set=[],  # Not extractable from email metadata alone
+            chosen="",
+            reasoning=snippet[:200],
             structured_data={
                 "message_id": msg_id,
                 "subject": subject,
@@ -154,8 +162,6 @@ class GmailAdapter(SourceAdapter):
                 "snippet": snippet[:200],
                 "needs_llm_analysis": True,
             },
-            confidence=0.6,  # Email context is noisy
-            extraction_method="rule_based",
         )
 
     @staticmethod

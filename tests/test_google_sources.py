@@ -58,6 +58,34 @@ class TestGmailAdapter:
         assert fragments[0].evidence_type == EvidenceType.DECISION
         assert "gmail:" in fragments[0].source_id
 
+    @patch("twin_runtime.sources.gmail_adapter.GmailAdapter._get_service")
+    def test_scan_returns_typed_decision_evidence(self, mock_service):
+        mock_svc = MagicMock()
+        mock_service.return_value = mock_svc
+        mock_svc.users().messages().list().execute.return_value = {
+            "messages": [{"id": "msg-001"}]
+        }
+        mock_svc.users().messages().get().execute.return_value = {
+            "id": "msg-001",
+            "snippet": "I decided to go with option A for the project",
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Re: Project decision"},
+                    {"name": "Date", "value": "Thu, 13 Mar 2026 10:30:00 +0800"},
+                    {"name": "To", "value": "team@example.com"},
+                ]
+            }
+        }
+        adapter = GmailAdapter()
+        adapter._service = mock_svc
+        fragments = adapter.scan()
+        assert len(fragments) == 1
+
+        from twin_runtime.sources.evidence_types import DecisionEvidence
+        assert isinstance(fragments[0], DecisionEvidence)
+        assert fragments[0].occurred_at is not None
+        assert fragments[0].valid_from is not None
+
     def test_extract_body_plain(self):
         import base64
         body_text = "I chose Python over TypeScript."
