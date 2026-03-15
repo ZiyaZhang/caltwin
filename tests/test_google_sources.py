@@ -165,9 +165,39 @@ class TestCalendarAdapter:
 
         assert len(event_fragments) == 2  # planning + 1:1
         assert len(pattern_fragments) == 1  # aggregate pattern
-        assert pattern_fragments[0].structured_data["total_events"] == 9
+        assert pattern_fragments[0].structured_metrics["total_events"] == 9
 
     def test_extract_patterns_too_few(self):
         adapter = CalendarAdapter()
         result = adapter._extract_patterns([{"start": {}, "end": {}}] * 3)
         assert result is None  # Too few events
+
+    @patch("twin_runtime.sources.calendar_adapter.CalendarAdapter._get_service")
+    def test_scan_returns_typed_behavior_evidence(self, mock_service):
+        mock_svc = MagicMock()
+        mock_service.return_value = mock_svc
+        mock_svc.events().list().execute.return_value = {
+            "items": [
+                {
+                    "id": "evt-001",
+                    "summary": "Sprint planning meeting",
+                    "start": {"dateTime": "2026-03-15T10:00:00+08:00"},
+                    "end": {"dateTime": "2026-03-15T11:00:00+08:00"},
+                    "attendees": [{"email": "a@b.com"}],
+                },
+            ] + [
+                {
+                    "id": f"evt-{i}",
+                    "summary": f"Meeting {i}",
+                    "start": {"dateTime": f"2026-03-{10+i:02d}T10:00:00+08:00"},
+                    "end": {"dateTime": f"2026-03-{10+i:02d}T11:00:00+08:00"},
+                } for i in range(2, 10)
+            ]
+        }
+        adapter = CalendarAdapter()
+        adapter._service = mock_svc
+        fragments = adapter.scan()
+
+        from twin_runtime.sources.evidence_types import BehaviorEvidence
+        for f in fragments:
+            assert isinstance(f, BehaviorEvidence)

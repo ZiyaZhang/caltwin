@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 from .base import EvidenceFragment, EvidenceType, SourceAdapter
+from .evidence_types import BehaviorEvidence
 from ..models.primitives import DomainEnum
 
 
@@ -112,21 +113,24 @@ class CalendarAdapter(SourceAdapter):
         start = self._parse_event_time(event.get("start", {}))
         attendees = [a.get("email", "") for a in event.get("attendees", [])]
 
-        return EvidenceFragment(
+        return BehaviorEvidence(
             source_type=self.source_type,
             source_id=f"calendar:{event.get('id', '')}",
-            evidence_type=EvidenceType.BEHAVIOR,
-            timestamp=start,
+            occurred_at=start,
+            valid_from=start,
             summary=f"Calendar: {summary[:100]}",
-            structured_data={
+            confidence=0.5,
+            extraction_method="api_structured",
+            user_id="user-default",
+            action_type="calendar_event",
+            pattern=summary,
+            structured_metrics={
                 "event_id": event.get("id", ""),
                 "summary": summary,
                 "attendee_count": len(attendees),
                 "duration_minutes": self._event_duration(event),
                 "is_recurring": event.get("recurringEventId") is not None,
             },
-            confidence=0.5,
-            extraction_method="api_structured",
         )
 
     def _extract_patterns(self, events: list) -> Optional[EvidenceFragment]:
@@ -173,15 +177,18 @@ class CalendarAdapter(SourceAdapter):
             ],
         }
 
-        return EvidenceFragment(
+        return BehaviorEvidence(
             source_type=self.source_type,
             source_id="calendar:patterns",
-            evidence_type=EvidenceType.BEHAVIOR,
-            timestamp=datetime.now(timezone.utc),
+            occurred_at=datetime.now(timezone.utc),
+            valid_from=datetime.now(timezone.utc) - timedelta(days=self._lookback_days),
             summary=f"Calendar patterns: {total} events over {self._lookback_days} days",
-            structured_data=patterns,
             confidence=0.7,
             extraction_method="rule_based",
+            user_id="user-default",
+            action_type="calendar_patterns",
+            pattern=f"{total} events, avg {avg_duration:.0f}min, busiest: {patterns['busiest_day']}",
+            structured_metrics=patterns,
         )
 
     @staticmethod
