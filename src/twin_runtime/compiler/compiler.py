@@ -19,6 +19,9 @@ from typing import Any, Dict, List, Optional
 from ..models.primitives import DomainEnum
 from ..models.twin_state import TwinState
 from ..sources.base import EvidenceFragment, EvidenceType
+from ..sources.evidence_types import (
+    DecisionEvidence, PreferenceEvidence, ReflectionEvidence,
+)
 from ..sources.registry import SourceRegistry
 from ..runtime.llm_client import ask_json
 
@@ -107,13 +110,34 @@ class PersonaCompiler:
         evidence_lines = []
         for f in fragments[:30]:  # Cap at 30 to fit context
             domain_str = f.domain_hint.value if f.domain_hint else "unknown"
-            evidence_lines.append(
-                f"[{f.evidence_type.value}|{domain_str}|conf={f.confidence:.1f}] "
-                f"{f.summary}"
-            )
-            if f.raw_excerpt:
-                excerpt = f.raw_excerpt[:300].replace("\n", " ")
-                evidence_lines.append(f"  Excerpt: {excerpt}")
+
+            # Use typed fields if available (isinstance checks for type safety)
+            if isinstance(f, DecisionEvidence) and f.chosen:
+                evidence_lines.append(
+                    f"[DECISION|{domain_str}|conf={f.confidence:.1f}] "
+                    f"Chose '{f.chosen}' from {f.option_set}. {f.summary}"
+                )
+                if f.reasoning:
+                    evidence_lines.append(f"  Reasoning: {f.reasoning}")
+            elif isinstance(f, PreferenceEvidence) and f.dimension:
+                evidence_lines.append(
+                    f"[PREFERENCE|{domain_str}|conf={f.confidence:.1f}] "
+                    f"{f.dimension}: {f.direction} (strength={f.strength:.1f}). {f.summary}"
+                )
+            elif isinstance(f, ReflectionEvidence) and f.insight:
+                evidence_lines.append(
+                    f"[REFLECTION|{domain_str}|conf={f.confidence:.1f}] "
+                    f"Topic: {f.topic}. {f.insight[:200]}"
+                )
+            else:
+                # Fallback: use summary + raw_excerpt (works for legacy and all typed)
+                evidence_lines.append(
+                    f"[{f.evidence_type.value}|{domain_str}|conf={f.confidence:.1f}] "
+                    f"{f.summary}"
+                )
+                if f.raw_excerpt:
+                    excerpt = f.raw_excerpt[:300].replace("\n", " ")
+                    evidence_lines.append(f"  Excerpt: {excerpt}")
 
         user_msg = f"""Analyze these {len(evidence_lines)} evidence fragments about a person and extract decision-making parameters:
 
