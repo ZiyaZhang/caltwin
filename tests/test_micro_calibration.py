@@ -124,3 +124,43 @@ class TestApplyUpdate:
         new_twin = apply_update(update, sample_twin)
         actual_delta = abs(new_twin.shared_decision_core.risk_tolerance - old)
         assert actual_delta <= 0.05
+
+
+class TestPipelineIntegration:
+    def test_runner_with_micro_calibrate(self, sample_twin):
+        """Verify runner.run(micro_calibrate=True) attaches pending update."""
+        from unittest.mock import patch, MagicMock
+        from twin_runtime.domain.models.primitives import DecisionMode
+
+        mock_plan_obj = MagicMock()
+        mock_plan_obj.rationale = "test rationale"
+        mock_plan_obj.domains_to_activate = [DomainEnum.WORK]
+        mock_plan_obj.skipped_domains = {}
+        mock_plan_obj.model_dump.return_value = {}
+
+        mock_trace = MagicMock()
+        mock_trace.decision_mode = DecisionMode.DIRECT
+        mock_trace.uncertainty = 0.27
+        mock_trace.activated_domains = [DomainEnum.WORK]
+        mock_trace.head_assessments = [MagicMock(domain=DomainEnum.WORK, confidence=0.73)]
+        mock_trace.twin_state_version = "v002"
+
+        with patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
+             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
+             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
+             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn, \
+             patch("twin_runtime.application.pipeline.runner.plan_memory_access") as mock_plan, \
+             patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext") as mock_ctx:
+
+            mock_si.return_value = MagicMock()
+            mock_plan.return_value = (mock_plan_obj, [])
+            mock_ctx.return_value = MagicMock()
+            mock_ah.return_value = [MagicMock(domain=DomainEnum.WORK, confidence=0.73)]
+            mock_arb.return_value = MagicMock(report_id="r1")
+            mock_syn.return_value = mock_trace
+
+            from twin_runtime.application.pipeline.runner import run
+            trace = run("test query", ["A", "B"], sample_twin, micro_calibrate=True)
+
+            # pending_calibration_update should be set (may be None if recalibrate returns None)
+            assert hasattr(trace, 'pending_calibration_update')

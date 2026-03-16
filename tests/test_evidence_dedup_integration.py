@@ -53,3 +53,31 @@ class TestStoreWriteTimeDedup:
         from pathlib import Path
         clusters = list(Path(self.tmpdir).rglob("clusters/*.json"))
         assert len(clusters) >= 1
+
+
+class TestCompilerDedup:
+    def test_compiler_deduplicates(self):
+        from unittest.mock import patch, MagicMock
+        from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
+
+        registry = MagicMock()
+        frag1 = MagicMock()
+        frag1.content_hash = "abc123"
+        frag1.confidence = 0.8
+        frag2 = MagicMock()
+        frag2.content_hash = "abc123"  # duplicate
+        frag2.confidence = 0.6
+        frag3 = MagicMock()
+        frag3.content_hash = "def456"
+        frag3.confidence = 0.9
+        registry.scan_all.return_value = [frag1, frag2, frag3]
+
+        compiler = PersonaCompiler(registry, llm=MagicMock())
+        # Patch deduplicate at the source module (lazy-imported inside compile())
+        with patch(
+            "twin_runtime.domain.evidence.clustering.deduplicate",
+            return_value=[frag1, frag3],
+        ), patch.object(compiler, 'extract_parameters', return_value={}) as mock_extract:
+            compiler.compile()
+            called_frags = mock_extract.call_args[0][0]
+            assert len(called_frags) <= 2
