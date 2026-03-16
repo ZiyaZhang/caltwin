@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Dict, Literal
 
 from pydantic import Field
 
@@ -132,6 +132,23 @@ class BiasCorrectionAction(str, Enum):
     FORCE_CLARIFICATION = "force_clarification"
 
 
+class OutcomeSource(str, Enum):
+    USER_CORRECTION = "user_correction"
+    USER_REFLECTION = "user_reflection"
+    OBSERVED = "observed"
+
+
+class MicroCalibrationTrigger(str, Enum):
+    CONFIDENCE_RECAL = "confidence_recal"
+    OUTCOME_UPDATE = "outcome_update"
+
+
+class DetectedBiasStatus(str, Enum):
+    PENDING_REVIEW = "pending_review"
+    ACCEPTED = "accepted"
+    DISMISSED = "dismissed"
+
+
 class DependencyScope(str, Enum):
     SELF = "self"
     FEW_OTHERS = "few_others"
@@ -158,3 +175,19 @@ class SituationConflictType(str, Enum):
     REWARD_VS_RISK = "reward_vs_risk"
     MIXED = "mixed"
     OTHER = "other"
+
+
+# --- Utility functions ---
+
+_TASK_TYPE_ALIASES: Dict[str, str] = {}
+
+
+def uncertainty_to_confidence(uncertainty: float) -> float:
+    """Convert uncertainty (higher=less certain) to confidence (higher=more certain)."""
+    return round(1.0 - uncertainty, 4)
+
+
+def canonicalize_task_type(raw: str) -> str:
+    """Normalize task_type: lowercase, strip, spaces to underscores, alias lookup."""
+    normalized = raw.lower().strip().replace(" ", "_")
+    return _TASK_TYPE_ALIASES.get(normalized, normalized)
