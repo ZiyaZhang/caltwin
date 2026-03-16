@@ -81,7 +81,6 @@ class OutcomeRecord(BaseModel):
     actual_choice: str
     actual_reasoning: Optional[str] = None
     outcome_source: OutcomeSource
-    choice_matched_prediction: bool
     prediction_rank: Optional[int] = Field(default=None, ge=1)  # None = miss
     confidence_at_prediction: float = confidence_field()  # 1 - trace.uncertainty
     time_to_outcome_hours: Optional[float] = Field(default=None, ge=0)
@@ -89,14 +88,14 @@ class OutcomeRecord(BaseModel):
     task_type: Optional[str] = None  # @field_validator → canonicalize
     created_at: datetime
 
+    @computed_field
+    @property
+    def choice_matched_prediction(self) -> bool:
+        """Derived: True iff prediction_rank == 1. Single source of truth."""
+        return self.prediction_rank == 1
+
     @model_validator(mode="after")
-    def _validate_consistency(self):
-        # prediction_rank is None → choice_matched_prediction must be False
-        if self.prediction_rank is None and self.choice_matched_prediction:
-            raise ValueError("prediction_rank is None but choice_matched_prediction is True")
-        # prediction_rank == 1 → choice_matched_prediction must be True
-        if self.prediction_rank == 1 and not self.choice_matched_prediction:
-            raise ValueError("prediction_rank is 1 but choice_matched_prediction is False")
+    def _validate_outcome_source(self):
         # USER_REFLECTION → actual_reasoning required
         if self.outcome_source == OutcomeSource.USER_REFLECTION and not self.actual_reasoning:
             raise ValueError("USER_REFLECTION requires actual_reasoning")
@@ -172,7 +171,7 @@ class TwinFidelityScore(BaseModel):
     overall_confidence: float = confidence_field()  # min(four confidence_in_metric)
 
     total_cases: int = Field(ge=0)
-    domain_breakdown: Dict[str, float] = Field(default_factory=dict)
+    domain_breakdown: Dict[str, float] = Field(default_factory=dict)  # values clamped to [0,1] at compute time
     evaluation_ids: List[str] = Field(default_factory=list)
 
     ECE_BIN_EDGES: ClassVar[List[float]] = [0.0, 0.3, 0.6, 1.0]
@@ -218,6 +217,7 @@ class EvaluationCaseDetail(BaseModel):
     case_id: str
     domain: DomainEnum
     task_type: str  # @field_validator → canonicalize
+    observed_context: str  # from CalibrationCase — needed by detect_biases LLM prompt
     choice_score: float = confidence_field()
     reasoning_score: Optional[float] = None
     prediction_ranking: List[str]
@@ -239,7 +239,7 @@ File: `domain/models/runtime.py`
 ```python
 # New fields on RuntimeDecisionTrace:
 outcome_id: Optional[str] = None
-fidelity_prediction: Optional[float] = None
+fidelity_prediction: Optional[float] = confidence_field(default=None)  # [0,1] constrained
 pending_calibration_update: Optional[Any] = None  # MicroCalibrationUpdate if micro_calibrate=True
 ```
 
@@ -336,7 +336,7 @@ Without this, `compute_fidelity_score` and `detect_biases` will receive empty `c
 ```python
 def compute_fidelity_score(
     evaluation: TwinEvaluation,
-    historical_evaluations: List[TwinEvaluation] = [],
+    historical_evaluations: Optional[List[TwinEvaluation]] = None,
 ) -> TwinFidelityScore:
 ```
 
@@ -359,12 +359,13 @@ def compute_fidelity_score(
 - `details`: `{"bins": [{"range": "...", "avg_conf": ..., "accuracy": ..., "count": ...}], "non_empty_bins": N}`
 
 **TS (Temporal Stability):**
-- Requires ≥2 evaluations (including current)
+- Function internally appends `evaluation.choice_similarity` to `[h.choice_similarity for h in historical_evaluations]` to form the full sequence. Caller passes historical only; current is always included.
+- Requires ≥2 total evaluations (historical + current)
 - `cv = std / max(mean, 1e-6)` then `min(cv, 1.0)`
 - `TS = 1.0 - cv`
-- `confidence_in_metric = min(1.0, len(evaluations) / 5)`
-- 1 evaluation → value=1.0 (assume stable), confidence=0.0
-- `details`: `{"history": [0.650, 0.725, 0.750, ...]}`
+- `confidence_in_metric = min(1.0, len(all_evaluations) / 5)`
+- 1 evaluation (no history) → value=1.0 (assume stable), confidence=0.0
+- `details`: `{"history": [0.650, 0.725, 0.750, ...], "includes_current": true}`
 
 **Overall aggregation:**
 ```python
