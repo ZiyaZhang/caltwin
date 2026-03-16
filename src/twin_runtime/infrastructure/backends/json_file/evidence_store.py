@@ -19,8 +19,27 @@ class JsonFileEvidenceStore:
         (self.base / "clusters").mkdir(exist_ok=True)
 
     def store_fragment(self, fragment: EvidenceFragment) -> str:
-        path = self.base / "fragments" / f"{fragment.content_hash}.json"
-        path.write_text(fragment.model_dump_json(indent=2))
+        existing = self.get_by_hash(fragment.content_hash)
+        if existing is None:
+            path = self.base / "fragments" / f"{fragment.content_hash}.json"
+            path.write_text(fragment.model_dump_json(indent=2))
+        elif existing.source_type != fragment.source_type:
+            from twin_runtime.domain.evidence.clustering import EvidenceCluster
+            import uuid
+            higher = existing if existing.confidence >= fragment.confidence else fragment
+            lower = fragment if higher is existing else existing
+            cluster = EvidenceCluster(
+                cluster_id=str(uuid.uuid4()),
+                canonical_fragment=higher,
+                supporting_fragments=[lower],
+                source_types=[existing.source_type, fragment.source_type],
+                merged_confidence=min(1.0, higher.confidence + 0.05),
+            )
+            self.store_cluster(cluster)
+        else:
+            if fragment.confidence > existing.confidence:
+                path = self.base / "fragments" / f"{fragment.content_hash}.json"
+                path.write_text(fragment.model_dump_json(indent=2))
         return fragment.content_hash
 
     def store_cluster(self, cluster: EvidenceCluster) -> str:

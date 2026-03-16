@@ -173,6 +173,20 @@ class PersonaCompiler:
             twin = self._create_initial(user_id="user-default", fragments=[])
             return twin, self.evidence_graph, []
 
+        # Phase 3: dedup before extraction
+        from twin_runtime.domain.evidence.clustering import deduplicate, EvidenceCluster
+        deduped = deduplicate(fragments)
+        flat_fragments = []
+        for item in deduped:
+            if isinstance(item, EvidenceCluster):
+                frag = item.canonical_fragment.model_copy(
+                    update={"confidence": item.merged_confidence}
+                )
+                flat_fragments.append(frag)
+            else:
+                flat_fragments.append(item)
+        fragments = flat_fragments
+
         extracted = self.extract_parameters(fragments)
 
         if existing is None:
