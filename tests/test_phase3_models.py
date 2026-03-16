@@ -138,3 +138,134 @@ class TestEvaluationCaseDetail:
             residual_direction="twin首选'A'，实际为'B'",
         )
         assert d.task_type == "collaboration_style"
+
+
+from twin_runtime.domain.models.calibration import (
+    DetectedBias, BiasCorrectionSuggestion,
+    FidelityMetric, TwinFidelityScore, MicroCalibrationUpdate,
+)
+from twin_runtime.domain.models.primitives import (
+    DetectedBiasStatus, BiasCorrectionAction, MicroCalibrationTrigger,
+)
+
+
+class TestDetectedBias:
+    def _make(self, **overrides):
+        defaults = dict(
+            bias_id="bias-1",
+            detected_at=datetime.now(timezone.utc),
+            domain=DomainEnum.WORK,
+            task_type="collaboration_style",
+            direction_description="twin偏向自主，用户偏向协作",
+            supporting_case_ids=["c1", "c2", "c3"],
+            sample_size=3,
+            bias_strength=0.67,
+            llm_analysis="LLM founder prior",
+            status=DetectedBiasStatus.PENDING_REVIEW,
+        )
+        defaults.update(overrides)
+        return DetectedBias(**defaults)
+
+    def test_pending_no_review_fields_ok(self):
+        b = self._make()
+        assert b.reviewed_at is None
+
+    def test_accepted_requires_review_fields(self):
+        with pytest.raises(Exception):
+            self._make(status=DetectedBiasStatus.ACCEPTED)
+
+    def test_accepted_with_review_fields_ok(self):
+        b = self._make(
+            status=DetectedBiasStatus.ACCEPTED,
+            reviewed_at=datetime.now(timezone.utc),
+            reviewed_by="user-ziya",
+        )
+        assert b.status == DetectedBiasStatus.ACCEPTED
+
+    def test_sample_size_mismatch_fails(self):
+        with pytest.raises(Exception):
+            self._make(sample_size=5)
+
+    def test_with_suggestion(self):
+        suggestion = BiasCorrectionSuggestion(
+            target_scope={"domain": "work", "task_type": "collaboration_style"},
+            correction_action=BiasCorrectionAction.FORCE_COMPARE,
+            correction_payload={"instruction": "Prefer collaborative approaches"},
+            rationale="Batch eval shows systematic bias",
+        )
+        b = self._make(suggested_correction=suggestion)
+        assert b.suggested_correction.correction_action == BiasCorrectionAction.FORCE_COMPARE
+
+
+class TestFidelityMetric:
+    def test_valid(self):
+        m = FidelityMetric(value=0.75, confidence_in_metric=0.67, case_count=20)
+        assert m.value == 0.75
+
+    def test_out_of_range(self):
+        with pytest.raises(Exception):
+            FidelityMetric(value=1.5, confidence_in_metric=0.5, case_count=10)
+
+
+class TestTwinFidelityScore:
+    def _make_metric(self, value=0.75, conf=0.67, count=20):
+        return FidelityMetric(value=value, confidence_in_metric=conf, case_count=count)
+
+    def test_valid_score(self):
+        s = TwinFidelityScore(
+            score_id="fs-1",
+            twin_state_version="v002",
+            computed_at=datetime.now(timezone.utc),
+            choice_fidelity=self._make_metric(),
+            reasoning_fidelity=self._make_metric(0.5, 0.3, 10),
+            calibration_quality=self._make_metric(0.82, 0.5, 20),
+            temporal_stability=self._make_metric(1.0, 0.0, 20),
+            overall_score=0.72,
+            overall_confidence=0.0,
+            total_cases=20,
+        )
+        assert s.overall_score == 0.72
+
+    def test_domain_breakdown_range_validator(self):
+        with pytest.raises(Exception):
+            TwinFidelityScore(
+                score_id="fs-1",
+                twin_state_version="v002",
+                computed_at=datetime.now(timezone.utc),
+                choice_fidelity=self._make_metric(),
+                reasoning_fidelity=self._make_metric(),
+                calibration_quality=self._make_metric(),
+                temporal_stability=self._make_metric(),
+                overall_score=0.72,
+                overall_confidence=0.5,
+                total_cases=20,
+                domain_breakdown={"work": 1.5},
+            )
+
+
+class TestMicroCalibrationUpdate:
+    def _make(self, **overrides):
+        defaults = dict(
+            update_id="mcu-1",
+            twin_state_version="v002",
+            trigger=MicroCalibrationTrigger.CONFIDENCE_RECAL,
+            created_at=datetime.now(timezone.utc),
+            parameter_deltas={"shared_decision_core.risk_tolerance": -0.01},
+            previous_values={"shared_decision_core.risk_tolerance": 0.65},
+            learning_rate_used=0.01,
+            rationale="Confidence recalibration after pipeline run",
+        )
+        defaults.update(overrides)
+        return MicroCalibrationUpdate(**defaults)
+
+    def test_valid(self):
+        u = self._make()
+        assert u.applied is False
+
+    def test_applied_requires_applied_at(self):
+        with pytest.raises(Exception):
+            self._make(applied=True)
+
+    def test_applied_with_timestamp_ok(self):
+        u = self._make(applied=True, applied_at=datetime.now(timezone.utc))
+        assert u.applied is True
