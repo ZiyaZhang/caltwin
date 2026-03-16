@@ -6,13 +6,25 @@ Step A of the runtime — structured evaluation only, no prose.
 from __future__ import annotations
 
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 from twin_runtime.domain.models.primitives import DomainEnum, confidence_field
 from twin_runtime.domain.models.runtime import HeadAssessment
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedDecisionCore, CausalBeliefModel
+from twin_runtime.domain.models.planner import EnrichedActivationContext
+from twin_runtime.domain.evidence.base import EvidenceFragment
 from twin_runtime.domain.ports.llm_port import LLMPort
+
+
+def _format_evidence(evidence: List[EvidenceFragment]) -> str:
+    """Format evidence fragments for LLM prompt injection."""
+    if not evidence:
+        return ""
+    lines = []
+    for i, frag in enumerate(evidence, 1):
+        lines.append(f"{i}. [{frag.evidence_type.value}] {frag.summary} (confidence: {frag.confidence:.2f})")
+    return "\n".join(lines)
 
 
 def _build_head_prompt(
@@ -22,6 +34,7 @@ def _build_head_prompt(
     core: SharedDecisionCore,
     causal: CausalBeliefModel,
     feature_summary: str,
+    evidence_summary: str = "",
 ) -> tuple[str, str]:
     """Build system + user prompts for a single domain head assessment."""
     system = f"""You are a decision-assessment module for the "{head.domain.value}" domain.
@@ -47,6 +60,15 @@ Output ONLY a JSON object:
 }}
 Use the goal axes as utility decomposition keys. Output ONLY valid JSON."""
 
+    if evidence_summary:
+        system += f"""
+
+## Relevant Evidence
+The following raw evidence fragments were retrieved for this decision:
+{evidence_summary}
+
+Use these alongside the persona parameters to inform your assessment."""
+
     user = f"""Situation: {feature_summary}
 
 Query: {query}
@@ -59,12 +81,29 @@ Options to rank: {json.dumps(option_set)}"""
 def activate_heads(
     query: str,
     option_set: List[str],
-    frame: SituationFrame,
-    twin: TwinState,
+    context: Union[EnrichedActivationContext, SituationFrame],
+    twin: Optional[TwinState] = None,
     *,
     llm: LLMPort,
 ) -> List[HeadAssessment]:
-    """Generate HeadAssessment for each activated domain."""
+    """Generate HeadAssessment for each activated domain.
+
+    Args:
+        context: Either EnrichedActivationContext (from planner) or SituationFrame (backward compat)
+        twin: Required when context is SituationFrame, ignored when EnrichedActivationContext
+    """
+    if isinstance(context, EnrichedActivationContext):
+        twin = context.twin
+        frame = context.frame
+        evidence = context.retrieved_evidence
+    else:
+        frame = context
+        evidence = []
+        if twin is None:
+            raise ValueError("twin is required when context is a SituationFrame")
+
+    evidence_summary = _format_evidence(evidence)
+
     # Select heads to activate: domains in activation vector with weight > 0.1
     active_domains = {
         d for d, w in frame.domain_activation_vector.items() if w > 0.1
@@ -93,6 +132,7 @@ def activate_heads(
             twin.shared_decision_core,
             twin.causal_belief_model,
             feature_summary,
+            evidence_summary,
         )
 
         raw = llm.ask_json(system, user, max_tokens=512)

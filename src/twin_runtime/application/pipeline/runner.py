@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from twin_runtime.domain.models.planner import EnrichedActivationContext
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
 from twin_runtime.domain.models.twin_state import TwinState
 from twin_runtime.domain.ports.llm_port import LLMPort
@@ -12,6 +13,7 @@ from twin_runtime.application.pipeline.situation_interpreter import interpret_si
 from twin_runtime.application.pipeline.head_activator import activate_heads
 from twin_runtime.application.pipeline.conflict_arbiter import arbitrate
 from twin_runtime.application.pipeline.decision_synthesizer import synthesize
+from twin_runtime.application.planner.memory_access_planner import plan_memory_access
 
 
 def run(
@@ -32,16 +34,26 @@ def run(
     # 1. Situation Interpreter
     frame = interpret_situation(query, twin, llm=llm)
 
-    # 2. Memory Access Planner (will be wired in Task 5/6)
-    evidence = []
+    # 2. Memory Access Planner
+    plan, evidence = plan_memory_access(frame, twin, evidence_store)
 
-    # 3. Head Activation
-    assessments = activate_heads(query, option_set, frame, twin, llm=llm)
+    # 3. Head Activation — pass enriched context with retrieved evidence
+    context = EnrichedActivationContext(
+        twin=twin, frame=frame,
+        retrieved_evidence=evidence,
+        retrieval_rationale=plan.rationale,
+    )
+    assessments = activate_heads(query, option_set, context, llm=llm)
 
     # 4. Conflict Arbiter
     conflict = arbitrate(assessments)
 
     # 5. Decision Synthesis
     trace = synthesize(query, option_set, frame, assessments, conflict, twin, llm=llm)
+
+    # 6. Populate audit fields
+    trace.memory_access_plan = plan.model_dump()
+    trace.retrieved_evidence_count = len(evidence)
+    trace.skipped_domains = {d.value: reason for d, reason in plan.skipped_domains.items()}
 
     return trace
