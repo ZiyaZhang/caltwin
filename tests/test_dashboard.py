@@ -119,3 +119,18 @@ class TestDashboardGeneration:
         ]
         html = generate_dashboard(sample_payload)
         assert "偏差" in html or "bias" in html.lower()
+
+
+import tempfile
+from pathlib import Path
+from twin_runtime.interfaces.cli import dashboard_command
+
+
+class TestDashboardCommand:
+    def test_no_scores_early_exit(self, capsys):
+        from unittest.mock import patch, MagicMock
+        with patch("twin_runtime.interfaces.cli.CalibrationStore") as MockStore:
+            MockStore.return_value.list_fidelity_scores.return_value = []
+            dashboard_command(output="/tmp/test_no_scores.html")
+            captured = capsys.readouterr()
+            assert "No fidelity scores" in captured.out
