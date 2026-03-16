@@ -210,10 +210,10 @@ def _section_calibration(payload: DashboardPayload) -> str:
     rows = ""
     for b in bins:
         rng = html.escape(str(b.get("range", "")))
-        avg_conf = b.get("avg_conf", 0.0)
-        accuracy = b.get("accuracy", 0.0)
-        count = b.get("count", 0)
-        gap = abs(avg_conf - accuracy)
+        avg_conf = b.get("avg_conf") or 0.0
+        accuracy = b.get("accuracy") or 0.0
+        count = b.get("count") or 0
+        gap = abs(float(avg_conf) - float(accuracy))
         gap_color = "#f44336" if gap > 0.2 else ("#ff9800" if gap > 0.1 else "#4caf50")
         rows += (
             f'<tr>'

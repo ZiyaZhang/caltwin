@@ -30,12 +30,15 @@ def dashboard_command(output: str = "fidelity_report.html", open_browser: bool =
         return
 
     latest_score = scores[0]
-    eval_id = latest_score.evaluation_ids[-1] if latest_score.evaluation_ids else None
-    evaluation = next(
-        (e for e in store.list_evaluations() if e.evaluation_id == eval_id), None
-    )
+    # Find associated evaluation — try evaluation_ids first, fall back to latest
+    eval_ids = getattr(latest_score, 'evaluation_ids', None) or []
+    evals = store.list_evaluations()
+    if eval_ids:
+        evaluation = next((e for e in evals if e.evaluation_id == eval_ids[-1]), None)
+    else:
+        evaluation = evals[-1] if evals else None
     if not evaluation:
-        print(f"Evaluation {eval_id} not found.")
+        print("No evaluation found. Run: python tools/batch_evaluate.py")
         return
 
     with open(_FIXTURE) as f:

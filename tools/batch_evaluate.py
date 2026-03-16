@@ -87,6 +87,10 @@ def run_batch(with_bias_detection: bool = False) -> None:
                 flag = " [POTENTIAL BIAS]" if abs(deviation) > 0.2 else ""
                 print(f"  {domain:30s}: deviation from mean = {deviation:+.3f}{flag}")
 
+    # Persist evaluation and fidelity score to store (for dashboard)
+    store.save_evaluation(evaluation)
+    store.save_fidelity_score(fidelity)
+
     # Save report
     report = {
         "twin_version": twin.state_version,

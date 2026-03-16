@@ -184,7 +184,15 @@ def evaluate_fidelity(
     case_details: list[EvaluationCaseDetail] = []
 
     for case in cases:
-        result = evaluate_single_case(case, twin)
+        try:
+            result = evaluate_single_case(case, twin)
+        except Exception as e:
+            print(f"  ERROR on case {case.case_id}: {e}")
+            result = SingleCaseResult(
+                choice_score=0.0, reasoning_score=None, rank=None,
+                prediction_ranking=[], confidence_at_prediction=0.5,
+                output_text=f"ERROR: {e}", trace_id="error",
+            )
 
         choice_scores.append(result.choice_score)
         if result.reasoning_score is not None:

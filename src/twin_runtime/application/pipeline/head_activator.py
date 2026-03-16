@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Union
 from twin_runtime.domain.models.primitives import DomainEnum, confidence_field
 from twin_runtime.domain.models.runtime import HeadAssessment
 from twin_runtime.domain.models.situation import SituationFrame
-from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedDecisionCore, CausalBeliefModel
+from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedDecisionCore, CausalBeliefModel, BiasCorrectionEntry
 from twin_runtime.domain.models.planner import EnrichedActivationContext
 from twin_runtime.domain.evidence.base import EvidenceFragment
 from twin_runtime.domain.ports.llm_port import LLMPort
@@ -27,6 +27,22 @@ def _format_evidence(evidence: List[EvidenceFragment]) -> str:
     return "\n".join(lines)
 
 
+def _find_bias_corrections(
+    domain: DomainEnum,
+    corrections: List[BiasCorrectionEntry],
+) -> List[BiasCorrectionEntry]:
+    """Find active bias corrections that apply to this domain."""
+    matched = []
+    for bc in corrections:
+        if not bc.still_active:
+            continue
+        scope = bc.target_scope
+        if scope.get("domain") and scope["domain"] != domain.value:
+            continue
+        matched.append(bc)
+    return matched
+
+
 def _build_head_prompt(
     query: str,
     option_set: List[str],
@@ -35,6 +51,7 @@ def _build_head_prompt(
     causal: CausalBeliefModel,
     feature_summary: str,
     evidence_summary: str = "",
+    bias_corrections: Optional[List[BiasCorrectionEntry]] = None,
 ) -> tuple[str, str]:
     """Build system + user prompts for a single domain head assessment."""
     system = f"""You are a decision-assessment module for the "{head.domain.value}" domain.
@@ -68,6 +85,20 @@ The following raw evidence fragments were retrieved for this decision:
 {evidence_summary}
 
 Use these alongside the persona parameters to inform your assessment."""
+
+    if bias_corrections:
+        correction_lines = []
+        for bc in bias_corrections:
+            instruction = bc.correction_payload.get("instruction", "")
+            if instruction:
+                correction_lines.append(f"- {instruction}")
+        if correction_lines:
+            system += f"""
+
+## Known Bias Corrections
+IMPORTANT: The following corrections are based on observed discrepancies between
+LLM default assumptions and this person's actual behavior. Apply these when ranking:
+{chr(10).join(correction_lines)}"""
 
     user = f"""Situation: {feature_summary}
 
@@ -131,15 +162,18 @@ def activate_heads(
         if head is None:
             continue  # No head for this domain
 
+        domain_corrections = _find_bias_corrections(domain, twin.bias_correction_policy)
+
         system, user = _build_head_prompt(
             query, option_set, head,
             twin.shared_decision_core,
             twin.causal_belief_model,
             feature_summary,
             evidence_summary,
+            bias_corrections=domain_corrections,
         )
 
-        raw = llm.ask_json(system, user, max_tokens=512)
+        raw = llm.ask_json(system, user, max_tokens=2048)
 
         assessment = HeadAssessment(
             domain=domain,
