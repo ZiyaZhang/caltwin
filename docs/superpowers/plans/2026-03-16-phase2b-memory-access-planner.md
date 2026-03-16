@@ -450,10 +450,11 @@ Add:
 from twin_runtime.domain.ports.llm_port import LLMPort
 ```
 
-Add `llm` parameter to `PersonaCompiler.__init__`:
+Add `llm` parameter to `PersonaCompiler.__init__` (keep existing `registry` param):
 ```python
-def __init__(self, user_id: str, *, llm: Optional[LLMPort] = None):
-    self.user_id = user_id
+def __init__(self, registry: SourceRegistry, *, llm: Optional[LLMPort] = None):
+    self.registry = registry
+    self.evidence_graph = EvidenceGraph()
     self._llm = llm
 ```
 
@@ -640,9 +641,9 @@ def _make_frame(
         situation_feature_vector=SituationFeatureVector(
             reversibility=OrdinalTriLevel.MEDIUM,
             stakes=stakes,
-            uncertainty_type=UncertaintyType.EPISTEMIC,
+            uncertainty_type=UncertaintyType.MISSING_INFO,
             controllability=OrdinalTriLevel.MEDIUM,
-            option_structure=OptionStructure.BINARY,
+            option_structure=OptionStructure.CHOOSE_EXISTING,
         ),
         ambiguity_score=ambiguity,
         scope_status=scope_status,
@@ -896,8 +897,9 @@ def plan_memory_access(
     stakes = frame.situation_feature_vector.stakes
     ambiguity = frame.ambiguity_score
     routing_confidence = frame.routing_confidence
-    active_domains = [d for d, w in frame.domain_activation_vector.items() if w > 0.1]
-    twin_domains = {h.domain for h in twin.domain_heads}
+    # active_domains from raw frame (includes unmodeled), separate from gating result
+    all_activated = [d for d, w in frame.domain_activation_vector.items() if w > 0.1]
+    twin_domain_set = {h.domain for h in twin.domain_heads}
 
     # Rule 1: High stakes + low uncertainty -> verify past decisions
     if stakes == OrdinalTriLevel.HIGH and ambiguity < 0.3:
@@ -919,8 +921,8 @@ def plan_memory_access(
         rationale_parts.append("High ambiguity: retrieving preference evidence")
 
     # Rule 3: Multiple domains -> per-domain + cross-domain trajectory
-    if len(active_domains) >= 2:
-        for domain in active_domains:
+    if len(all_activated) >= 2:
+        for domain in all_activated:
             queries.append(RecallQuery(
                 query_type="by_domain",
                 user_id=user_id,
@@ -932,11 +934,11 @@ def plan_memory_access(
             user_id=user_id,
             limit=_DEFAULT_PER_QUERY,
         ))
-        rationale_parts.append(f"Multi-domain ({len(active_domains)}): per-domain + cross-domain trajectory")
+        rationale_parts.append(f"Multi-domain ({len(all_activated)}): per-domain + cross-domain trajectory")
 
     # Rule 4: Unmodeled domain -> rely on reflections
-    for domain in active_domains:
-        if domain not in twin_domains:
+    for domain in all_activated:
+        if domain not in twin_domain_set:
             queries.append(RecallQuery(
                 query_type="by_evidence_type",
                 user_id=user_id,
@@ -946,6 +948,10 @@ def plan_memory_access(
             disabled.append(EvidenceType.BEHAVIOR)
             rationale_parts.append(f"Unmodeled domain {domain.value}: using reflections only")
             break  # only add once
+
+    # NOTE: Spec rules "Recurring decision type" (similar_situations) and
+    # "Time-sensitive decision" (by_timeline + 30-day limit) are deferred —
+    # SituationFrame lacks the signals to detect these reliably.
 
     # Rule 5: Low routing confidence -> expand budget + broader context
     if routing_confidence < 0.5:
@@ -1037,44 +1043,40 @@ from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 
 
 class TestPlannerInPipeline:
-    def test_run_with_evidence_store(self):
-        """Full pipeline with mock LLM + mock EvidenceStore."""
+    def test_planner_called_when_store_provided(self):
+        """Verify planner is invoked with evidence_store during pipeline run."""
+        from unittest.mock import patch
         from twin_runtime.application.pipeline.runner import run
+        from twin_runtime.application.planner.memory_access_planner import plan_memory_access
 
-        # Mock LLM
-        mock_llm = MagicMock()
-        # interpret_situation needs ask_json to return a valid SituationFrame-like dict
-        mock_llm.ask_json.return_value = {
-            "domain_activations": {"work": 0.9},
-            "ambiguity_score": 0.75,  # triggers preference_on_axis rule
-            "routing_confidence": 0.8,
-        }
-        mock_llm.ask_text.return_value = "I recommend option A."
-
-        # Mock EvidenceStore
+        # We patch plan_memory_access to verify it's called,
+        # and patch each pipeline stage to avoid real LLM calls.
+        empty_plan = MemoryAccessPlan(rationale="test", domains_to_activate=[DomainEnum.WORK])
         mock_store = MagicMock()
-        now = datetime.now(timezone.utc)
-        mock_frag = EvidenceFragment(
-            source_type="test",
-            source_id="test-1",
-            evidence_type=EvidenceType.PREFERENCE,
-            user_id="user-test",
-            occurred_at=now,
-            valid_from=now,
-            summary="User prefers fast iteration",
-            confidence=0.8,
-        )
-        mock_store.query.return_value = [mock_frag]
 
-        # This test verifies the planner is wired in and evidence flows through.
-        # The LLM mock may not return perfect structured data for all stages,
-        # so we verify at a higher level.
-        # If this raises due to LLM mock returning wrong format, that's expected —
-        # the test validates wiring, not end-to-end correctness.
-        try:
-            from tests.conftest import sample_twin_dict
-        except ImportError:
-            pass
+        with patch("twin_runtime.application.pipeline.runner.plan_memory_access",
+                    return_value=(empty_plan, [])) as mock_planner, \
+             patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
+             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
+             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
+             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
+
+            # Set up minimal return values
+            mock_si.return_value = MagicMock()  # SituationFrame
+            mock_ah.return_value = [MagicMock()]  # List[HeadAssessment]
+            mock_arb.return_value = MagicMock()  # ConflictReport
+            mock_trace = MagicMock()
+            mock_syn.return_value = mock_trace
+
+            mock_llm = MagicMock()
+            mock_twin = MagicMock()
+
+            run("test query", ["A", "B"], mock_twin, llm=mock_llm, evidence_store=mock_store)
+
+            # Planner was called with the evidence store
+            mock_planner.assert_called_once()
+            call_args = mock_planner.call_args
+            assert call_args[0][2] is mock_store  # evidence_store arg
 
     def test_run_without_store_backward_compat(self):
         """Pipeline works without evidence_store (current behavior)."""
@@ -1124,17 +1126,58 @@ Run: `python3 -m pytest tests/test_planner_integration.py -v`
 
 - [ ] **Step 3: Wire planner into `runner.py`**
 
-Update the runner to call `plan_memory_access` between interpret and activate:
+Update the runner to call `plan_memory_access` between interpret and activate, and pass `EnrichedActivationContext` to head activator:
 
 ```python
 from twin_runtime.application.planner.memory_access_planner import plan_memory_access
+from twin_runtime.domain.models.planner import EnrichedActivationContext
 
 # In run(), after interpret_situation:
     # 2. Memory Access Planner
     plan, evidence = plan_memory_access(frame, twin, evidence_store)
 
-    # 3. Head Activation
-    assessments = activate_heads(query, option_set, frame, twin, llm=llm)
+    # 3. Head Activation — pass enriched context with retrieved evidence
+    context = EnrichedActivationContext(
+        twin=twin, frame=frame,
+        retrieved_evidence=evidence,
+        retrieval_rationale=plan.rationale,
+    )
+    assessments = activate_heads(query, option_set, context, llm=llm)
+```
+
+Also update `activate_heads` signature in `head_activator.py` to accept `EnrichedActivationContext`:
+
+```python
+from typing import Union
+from twin_runtime.domain.models.planner import EnrichedActivationContext
+
+def activate_heads(
+    query: str,
+    option_set: List[str],
+    context: Union[EnrichedActivationContext, SituationFrame],
+    twin: Optional[TwinState] = None,
+    *,
+    llm: LLMPort,
+) -> List[HeadAssessment]:
+    # Extract twin + frame from context
+    if isinstance(context, EnrichedActivationContext):
+        twin = context.twin
+        frame = context.frame
+        evidence = context.retrieved_evidence
+    else:
+        frame = context
+        evidence = []
+    # ... rest of function uses frame, twin, evidence
+```
+
+When `evidence` is non-empty, append an evidence section to the head prompt (in `_build_head_prompt`):
+
+```python
+# Add evidence_summary parameter to _build_head_prompt
+def _build_head_prompt(..., evidence_summary: str = "") -> tuple[str, str]:
+    # In the system prompt, after existing parameters, if evidence_summary:
+    if evidence_summary:
+        system += f"\n\n## Relevant Evidence\n{evidence_summary}\n\nUse these alongside the persona parameters."
 ```
 
 Also populate the trace's audit fields. In the `synthesize` call or after it, set:
