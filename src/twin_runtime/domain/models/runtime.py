@@ -63,6 +63,13 @@ class RuntimeDecisionTrace(BaseModel):
     skipped_domains: Dict[str, str] = Field(
         default_factory=dict, description="Domains skipped by planner gating, with reasons"
     )
+    outcome_id: Optional[str] = None
+    fidelity_prediction: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0, description="Predicted fidelity [0,1]"
+    )
+    pending_calibration_update: Optional[Any] = Field(
+        default=None, description="MicroCalibrationUpdate if micro_calibrate=True"
+    )
     created_at: datetime
 
 

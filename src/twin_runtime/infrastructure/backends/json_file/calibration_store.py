@@ -8,7 +8,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 
-from twin_runtime.domain.models.calibration import CalibrationCase, CandidateCalibrationCase, TwinEvaluation
+from twin_runtime.domain.models.calibration import (
+    CalibrationCase, CandidateCalibrationCase, TwinEvaluation,
+    OutcomeRecord, DetectedBias, TwinFidelityScore,
+)
+from twin_runtime.domain.models.primitives import DetectedBiasStatus
 from twin_runtime.domain.models.runtime import RuntimeEvent
 
 
@@ -22,6 +26,9 @@ class CalibrationStore:
         (self.base / "cases").mkdir(exist_ok=True)
         (self.base / "evaluations").mkdir(exist_ok=True)
         (self.base / "events").mkdir(exist_ok=True)
+        (self.base / "outcomes").mkdir(exist_ok=True)
+        (self.base / "detected_biases").mkdir(exist_ok=True)
+        (self.base / "fidelity_scores").mkdir(exist_ok=True)
 
     # --- Candidates ---
 
@@ -72,6 +79,7 @@ class CalibrationStore:
         evals = []
         for f in sorted((self.base / "evaluations").glob("*.json")):
             evals.append(TwinEvaluation(**json.loads(f.read_text())))
+        evals.sort(key=lambda e: e.evaluated_at)
         return evals
 
     # --- Events ---
@@ -89,3 +97,49 @@ class CalibrationStore:
                 continue
             events.append(ev)
         return events
+
+    # --- Outcomes ---
+
+    def save_outcome(self, outcome: OutcomeRecord) -> str:
+        path = self.base / "outcomes" / f"{outcome.outcome_id}.json"
+        path.write_text(outcome.model_dump_json(indent=2))
+        return outcome.outcome_id
+
+    def list_outcomes(self, trace_id: Optional[str] = None) -> List[OutcomeRecord]:
+        outcomes = []
+        for f in sorted((self.base / "outcomes").glob("*.json")):
+            o = OutcomeRecord(**json.loads(f.read_text()))
+            if trace_id is not None and o.trace_id != trace_id:
+                continue
+            outcomes.append(o)
+        return outcomes
+
+    # --- Detected Biases ---
+
+    def save_detected_bias(self, bias: DetectedBias) -> str:
+        path = self.base / "detected_biases" / f"{bias.bias_id}.json"
+        path.write_text(bias.model_dump_json(indent=2))
+        return bias.bias_id
+
+    def list_detected_biases(self, status: Optional[DetectedBiasStatus] = None) -> List[DetectedBias]:
+        biases = []
+        for f in sorted((self.base / "detected_biases").glob("*.json")):
+            b = DetectedBias(**json.loads(f.read_text()))
+            if status is not None and b.status != status:
+                continue
+            biases.append(b)
+        return biases
+
+    # --- Fidelity Scores ---
+
+    def save_fidelity_score(self, score: TwinFidelityScore) -> str:
+        path = self.base / "fidelity_scores" / f"{score.score_id}.json"
+        path.write_text(score.model_dump_json(indent=2))
+        return score.score_id
+
+    def list_fidelity_scores(self, limit: int = 10) -> List[TwinFidelityScore]:
+        scores = []
+        for f in sorted((self.base / "fidelity_scores").glob("*.json")):
+            scores.append(TwinFidelityScore(**json.loads(f.read_text())))
+        scores.sort(key=lambda s: s.computed_at, reverse=True)
+        return scores[:limit]

@@ -135,7 +135,7 @@ class DetectedBias(BaseModel):
     bias_id: str = Field(min_length=1)
     detected_at: datetime
     domain: DomainEnum
-    task_type: str
+    task_type: Optional[str] = None
     direction_description: str
     supporting_case_ids: List[str] = Field(default_factory=list)
     sample_size: int = Field(ge=1)
@@ -148,8 +148,8 @@ class DetectedBias(BaseModel):
 
     @field_validator("task_type", mode="before")
     @classmethod
-    def _canonicalize(cls, v: str) -> str:
-        return canonicalize_task_type(v)
+    def _canonicalize(cls, v):
+        return canonicalize_task_type(v) if v else v
 
     @model_validator(mode="after")
     def _validate_review_fields(self):

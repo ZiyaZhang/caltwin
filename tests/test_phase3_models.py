@@ -269,3 +269,99 @@ class TestMicroCalibrationUpdate:
     def test_applied_with_timestamp_ok(self):
         u = self._make(applied=True, applied_at=datetime.now(timezone.utc))
         assert u.applied is True
+
+
+import tempfile
+from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore as JsonCalibrationStore
+from twin_runtime.domain.models.calibration import (
+    OutcomeRecord, DetectedBias, TwinFidelityScore, FidelityMetric, TwinEvaluation,
+)
+from twin_runtime.domain.models.primitives import (
+    DomainEnum, OutcomeSource, DetectedBiasStatus,
+)
+
+
+class TestCalibrationStorePhase3:
+    def setup_method(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.store = JsonCalibrationStore(self.tmpdir, "test-user")
+
+    def test_save_and_list_outcomes(self):
+        o = OutcomeRecord(
+            outcome_id="out-1", trace_id="t1", user_id="test-user",
+            actual_choice="A", outcome_source=OutcomeSource.USER_CORRECTION,
+            prediction_rank=1, confidence_at_prediction=0.73,
+            domain=DomainEnum.WORK, created_at=datetime.now(timezone.utc),
+        )
+        self.store.save_outcome(o)
+        results = self.store.list_outcomes()
+        assert len(results) == 1
+        assert results[0].outcome_id == "out-1"
+
+    def test_list_outcomes_by_trace(self):
+        for i, tid in enumerate(["t1", "t1", "t2"]):
+            self.store.save_outcome(OutcomeRecord(
+                outcome_id=f"out-{i}", trace_id=tid, user_id="test-user",
+                actual_choice="A", outcome_source=OutcomeSource.USER_CORRECTION,
+                prediction_rank=1, confidence_at_prediction=0.73,
+                domain=DomainEnum.WORK, created_at=datetime.now(timezone.utc),
+            ))
+        assert len(self.store.list_outcomes(trace_id="t1")) == 2
+        assert len(self.store.list_outcomes(trace_id="t2")) == 1
+
+    def test_save_and_list_detected_biases(self):
+        b = DetectedBias(
+            bias_id="b-1", detected_at=datetime.now(timezone.utc),
+            domain=DomainEnum.WORK, direction_description="test",
+            supporting_case_ids=["c1", "c2", "c3"], sample_size=3,
+            bias_strength=0.67, llm_analysis="test",
+            status=DetectedBiasStatus.PENDING_REVIEW,
+        )
+        self.store.save_detected_bias(b)
+        results = self.store.list_detected_biases()
+        assert len(results) == 1
+        assert len(self.store.list_detected_biases(DetectedBiasStatus.PENDING_REVIEW)) == 1
+        assert len(self.store.list_detected_biases(DetectedBiasStatus.ACCEPTED)) == 0
+
+    def test_save_and_list_fidelity_scores(self):
+        metric = FidelityMetric(value=0.75, confidence_in_metric=0.67, case_count=20)
+        s = TwinFidelityScore(
+            score_id="fs-1", twin_state_version="v002",
+            computed_at=datetime.now(timezone.utc),
+            choice_fidelity=metric, reasoning_fidelity=metric,
+            calibration_quality=metric, temporal_stability=metric,
+            overall_score=0.75, overall_confidence=0.5, total_cases=20,
+        )
+        self.store.save_fidelity_score(s)
+        results = self.store.list_fidelity_scores(limit=10)
+        assert len(results) == 1
+
+    def test_fidelity_scores_ordered_desc(self):
+        metric = FidelityMetric(value=0.75, confidence_in_metric=0.67, case_count=20)
+        for i in range(3):
+            self.store.save_fidelity_score(TwinFidelityScore(
+                score_id=f"fs-{i}", twin_state_version="v002",
+                computed_at=datetime(2026, 3, 16+i, tzinfo=timezone.utc),
+                choice_fidelity=metric, reasoning_fidelity=metric,
+                calibration_quality=metric, temporal_stability=metric,
+                overall_score=0.75, overall_confidence=0.5, total_cases=20,
+            ))
+        results = self.store.list_fidelity_scores(limit=2)
+        assert len(results) == 2
+        assert results[0].score_id == "fs-2"  # newest first
+
+    def test_list_evaluations(self):
+        evals = self.store.list_evaluations()
+        assert isinstance(evals, list)
+
+    def test_list_evaluations_ordered_asc(self):
+        for i in range(3):
+            self.store.save_evaluation(TwinEvaluation(
+                evaluation_id=f"ev-{i}", twin_state_version="v002",
+                calibration_case_ids=[], choice_similarity=0.75,
+                domain_reliability={},
+                evaluated_at=datetime(2026, 3, 14+i, tzinfo=timezone.utc),
+            ))
+        evals = self.store.list_evaluations()
+        assert len(evals) == 3
+        assert evals[0].evaluation_id == "ev-0"  # oldest first
