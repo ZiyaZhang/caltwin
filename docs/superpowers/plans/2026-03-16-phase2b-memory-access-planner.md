@@ -458,17 +458,22 @@ def __init__(self, registry: SourceRegistry, *, llm: Optional[LLMPort] = None):
     self._llm = llm
 ```
 
-In `extract_parameters` and any other method that calls `ask_json(...)`, change to:
+In `extract_parameters`, the current code uses a self-module reference trick (`_self_mod.ask_json`) so that `unittest.mock.patch("...persona_compiler.ask_json", ...)` works. Change the method to prefer `self._llm` when available, and fall back to the existing module-level reference when not:
+
 ```python
-if self._llm is not None:
-    result = self._llm.ask_json(system, user)
-else:
-    # Lazy fallback for backward compat
-    from twin_runtime.infrastructure.llm.client import ask_json
-    result = ask_json(system, user)
+def extract_parameters(self, fragments: List[EvidenceFragment]) -> Dict[str, Any]:
+    # ... existing prompt construction code stays the same ...
+
+    if self._llm is not None:
+        return self._llm.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+    # Fallback: keep module-level ask_json for backward compat + test patching
+    import twin_runtime.application.compiler.persona_compiler as _self_mod
+    return _self_mod.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
 ```
 
-Note: The compiler keeps a lazy fallback because it's called from many places (CLI, tests) that don't yet pass an LLM. The pipeline stages don't need this — `run()` always provides `llm`.
+**IMPORTANT:** Keep the module-level `from twin_runtime.infrastructure.llm.client import ask_json` import! It is needed as the patch target for existing tests in `test_compiler_typed_extraction.py` and `test_compiler_cold_start.py`. The DI path (`self._llm`) bypasses it; the fallback path uses the `_self_mod.ask_json` reference that resolves to the module-level import. Existing test patches on `twin_runtime.application.compiler.persona_compiler.ask_json` continue to work.
+
+Note: The compiler keeps the module-level infrastructure import because it's called from many places (CLI, tests) that don't yet pass an LLM. The pipeline stages don't need this — `run()` always provides `llm`.
 
 - [ ] **Step 7: Run DI tests**
 
@@ -1211,6 +1216,8 @@ git commit -m "feat: wire Memory Access Planner into pipeline + integration test
 | 4 | Update runner + fix all callers | HIGH — must fix all test failures from Task 3 |
 | 5 | Implement Memory Access Planner | Medium — new code, well-tested rules |
 | 6 | Wire planner into pipeline + integration | Medium — integration concerns |
+
+**Note on ignored tests:** `test_pipeline_integration.py` and `test_full_cycle.py` are **API-dependent** (real LLM calls). They are pre-existing and ignored throughout. They call `run()` which has backward-compat `llm=None` default, so they remain functional. They do NOT call `activate_heads` directly. No changes needed — they will continue to work when an API key is available.
 
 **Total new tests:** ~28 (planner models, defaults, DI, planner rules, domain gating, integration)
 **Expected test count after:** 176+
