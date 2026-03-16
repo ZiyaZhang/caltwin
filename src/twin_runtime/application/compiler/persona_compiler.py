@@ -24,6 +24,7 @@ from twin_runtime.domain.evidence.types import (
 )
 from twin_runtime.infrastructure.sources.registry import SourceRegistry
 from twin_runtime.infrastructure.llm.client import ask_json
+from twin_runtime.domain.ports.llm_port import LLMPort
 
 
 class EvidenceGraph:
@@ -83,8 +84,9 @@ Only include fields where the evidence provides signal. Use null for uncertain v
 class PersonaCompiler:
     """Compile evidence from multiple sources into a TwinState."""
 
-    def __init__(self, registry: SourceRegistry):
+    def __init__(self, registry: SourceRegistry, *, llm: Optional[LLMPort] = None):
         self.registry = registry
+        self._llm = llm
         self.evidence_graph = EvidenceGraph()
 
     def collect_evidence(self, since: Optional[datetime] = None) -> List[EvidenceFragment]:
@@ -143,8 +145,9 @@ class PersonaCompiler:
 
 {chr(10).join(evidence_lines)}"""
 
-        # Late import via module reference so unittest.mock.patch on
-        # twin_runtime.application.compiler.persona_compiler.ask_json works.
+        if self._llm is not None:
+            return self._llm.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+        # Fallback: keep module-level ask_json for backward compat + test patching
         import twin_runtime.application.compiler.persona_compiler as _self_mod
         return _self_mod.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
 

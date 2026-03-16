@@ -14,7 +14,7 @@ from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, Merg
 from twin_runtime.domain.models.runtime import ConflictReport, HeadAssessment, RuntimeDecisionTrace
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState
-from twin_runtime.infrastructure.llm.client import ask_text
+from twin_runtime.domain.ports.llm_port import LLMPort
 
 
 def _synthesize_decision(
@@ -84,6 +84,7 @@ def _surface_realize(
     assessments: List[HeadAssessment],
     conflict: Optional[ConflictReport],
     twin: TwinState,
+    llm: LLMPort,
 ) -> str:
     """Step B: convert structured decision into natural language as the twin."""
     if mode == DecisionMode.REFUSED:
@@ -122,7 +123,7 @@ Head assessments:
 
 Generate a natural response as the twin."""
 
-    return ask_text(system, user, max_tokens=300)
+    return llm.ask_text(system, user, max_tokens=300)
 
 
 def synthesize(
@@ -132,6 +133,8 @@ def synthesize(
     assessments: List[HeadAssessment],
     conflict: Optional[ConflictReport],
     twin: TwinState,
+    *,
+    llm: LLMPort,
 ) -> RuntimeDecisionTrace:
     """Full synthesis: Step A (structured) + Step B (surface) -> RuntimeDecisionTrace."""
     decision, mode, uncertainty, refusal = _synthesize_decision(
@@ -139,7 +142,7 @@ def synthesize(
     )
 
     output_text = _surface_realize(
-        query, decision, mode, uncertainty, assessments, conflict, twin
+        query, decision, mode, uncertainty, assessments, conflict, twin, llm
     )
 
     return RuntimeDecisionTrace(

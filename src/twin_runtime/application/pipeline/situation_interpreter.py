@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel, ScopeStatus, UncertaintyType, OptionStructure
 from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, ScopeDeclaration
-from twin_runtime.infrastructure.llm.client import ask_json
+from twin_runtime.domain.ports.llm_port import LLMPort
 
 
 # --- Stage 1: Rule-based hard signal extraction ---
@@ -65,9 +65,9 @@ Given a user query and the twin's valid domains, output a JSON object with exact
 Only include domains from the provided list. Output ONLY valid JSON, no explanation."""
 
 
-def _llm_interpret(query: str, valid_domains: List[str]) -> dict:
+def _llm_interpret(query: str, valid_domains: List[str], llm: LLMPort) -> dict:
     user_msg = f"Valid domains: {valid_domains}\n\nQuery: {query}"
-    return ask_json(_INTERPRET_SYSTEM, user_msg, max_tokens=512)
+    return llm.ask_json(_INTERPRET_SYSTEM, user_msg, max_tokens=512)
 
 
 # --- Stage 3: Constrained routing policy ---
@@ -118,7 +118,7 @@ def _apply_routing_policy(
 # --- Public API ---
 
 
-def interpret_situation(query: str, twin: TwinState) -> SituationFrame:
+def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> SituationFrame:
     """Run the three-stage Situation Interpreter pipeline."""
     all_domains = [d.value for d in DomainEnum]
 
@@ -126,7 +126,7 @@ def interpret_situation(query: str, twin: TwinState) -> SituationFrame:
     keyword_hints = _keyword_scores(query)
 
     # Stage 2: LLM interpretation
-    llm_result = _llm_interpret(query, all_domains)
+    llm_result = _llm_interpret(query, all_domains, llm)
 
     # Merge: LLM is primary, keyword hints boost
     raw_activation: Dict[DomainEnum, float] = {}

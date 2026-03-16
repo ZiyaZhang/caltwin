@@ -12,7 +12,7 @@ from twin_runtime.domain.models.primitives import DomainEnum, confidence_field
 from twin_runtime.domain.models.runtime import HeadAssessment
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedDecisionCore, CausalBeliefModel
-from twin_runtime.infrastructure.llm.client import ask_json
+from twin_runtime.domain.ports.llm_port import LLMPort
 
 
 def _build_head_prompt(
@@ -61,6 +61,8 @@ def activate_heads(
     option_set: List[str],
     frame: SituationFrame,
     twin: TwinState,
+    *,
+    llm: LLMPort,
 ) -> List[HeadAssessment]:
     """Generate HeadAssessment for each activated domain."""
     # Select heads to activate: domains in activation vector with weight > 0.1
@@ -93,7 +95,7 @@ def activate_heads(
             feature_summary,
         )
 
-        raw = ask_json(system, user, max_tokens=512)
+        raw = llm.ask_json(system, user, max_tokens=512)
 
         assessment = HeadAssessment(
             domain=domain,
