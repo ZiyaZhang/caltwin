@@ -1,9 +1,3 @@
-"""Persona Compiler: evidence fragments → TwinState.
-
-The compiler aggregates EvidenceFragments from multiple sources
-and produces/updates a TwinState through LLM-assisted extraction.
-"""
-
-from .compiler import PersonaCompiler
-
+"""Backward-compat shim."""
+from twin_runtime.application.compiler.persona_compiler import PersonaCompiler  # noqa: F401
 __all__ = ["PersonaCompiler"]
