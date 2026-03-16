@@ -46,3 +46,95 @@ class TestCanonicalizeTaskType:
 
     def test_already_canonical(self):
         assert canonicalize_task_type("tool_selection") == "tool_selection"
+
+
+from datetime import datetime, timezone
+from twin_runtime.domain.models.calibration import (
+    OutcomeRecord, EvaluationCaseDetail, TwinEvaluation,
+)
+from twin_runtime.domain.models.primitives import DomainEnum, OutcomeSource
+
+
+class TestOutcomeRecord:
+    def _make(self, **overrides):
+        defaults = dict(
+            outcome_id="out-1",
+            trace_id="trace-1",
+            user_id="user-ziya",
+            actual_choice="选项A",
+            outcome_source=OutcomeSource.USER_CORRECTION,
+            prediction_rank=1,
+            confidence_at_prediction=0.73,
+            domain=DomainEnum.WORK,
+            created_at=datetime.now(timezone.utc),
+        )
+        defaults.update(overrides)
+        return OutcomeRecord(**defaults)
+
+    def test_valid_hit(self):
+        o = self._make(prediction_rank=1)
+        assert o.choice_matched_prediction is True
+
+    def test_valid_miss(self):
+        o = self._make(prediction_rank=None)
+        assert o.choice_matched_prediction is False
+
+    def test_partial_rank2(self):
+        o = self._make(prediction_rank=2)
+        assert o.choice_matched_prediction is False
+
+    def test_reflection_requires_reasoning(self):
+        with pytest.raises(Exception):
+            self._make(
+                outcome_source=OutcomeSource.USER_REFLECTION,
+                actual_reasoning=None,
+            )
+
+    def test_reflection_with_reasoning_ok(self):
+        o = self._make(
+            outcome_source=OutcomeSource.USER_REFLECTION,
+            actual_reasoning="因为...",
+        )
+        assert o.actual_reasoning == "因为..."
+
+    def test_task_type_canonicalized(self):
+        o = self._make(task_type="Career Direction")
+        assert o.task_type == "career_direction"
+
+    def test_prediction_rank_must_be_ge1(self):
+        with pytest.raises(Exception):
+            self._make(prediction_rank=0)
+
+    def test_confidence_clamped(self):
+        with pytest.raises(Exception):
+            self._make(confidence_at_prediction=1.5)
+
+
+class TestEvaluationCaseDetail:
+    def test_valid(self):
+        d = EvaluationCaseDetail(
+            case_id="c1",
+            domain=DomainEnum.WORK,
+            task_type="collaboration_style",
+            observed_context="写PRD时选择工作方式",
+            choice_score=1.0,
+            prediction_ranking=["AI先出稿", "自己先写"],
+            actual_choice="AI先出稿",
+            confidence_at_prediction=0.78,
+            residual_direction="",
+        )
+        assert d.task_type == "collaboration_style"
+
+    def test_task_type_canonicalized(self):
+        d = EvaluationCaseDetail(
+            case_id="c1",
+            domain=DomainEnum.WORK,
+            task_type="Collaboration Style",
+            observed_context="test",
+            choice_score=0.5,
+            prediction_ranking=["A"],
+            actual_choice="B",
+            confidence_at_prediction=0.5,
+            residual_direction="twin首选'A'，实际为'B'",
+        )
+        assert d.task_type == "collaboration_style"

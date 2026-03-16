@@ -5,12 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from twin_runtime.domain.models.primitives import (
     CandidateSourceType,
     DomainEnum,
     OrdinalTriLevel,
+    OutcomeSource,
+    canonicalize_task_type,
     confidence_field,
 )
 
@@ -49,6 +51,24 @@ class CalibrationCase(BaseModel):
     used_for_calibration: bool = False
 
 
+class EvaluationCaseDetail(BaseModel):
+    case_id: str
+    domain: DomainEnum
+    task_type: str
+    observed_context: str
+    choice_score: float = confidence_field()
+    reasoning_score: Optional[float] = None
+    prediction_ranking: List[str]
+    actual_choice: str
+    confidence_at_prediction: float = confidence_field()
+    residual_direction: str
+
+    @field_validator("task_type", mode="before")
+    @classmethod
+    def _canonicalize(cls, v: str) -> str:
+        return canonicalize_task_type(v)
+
+
 class TwinEvaluation(BaseModel):
     evaluation_id: str = Field(min_length=1)
     twin_state_version: str
@@ -66,3 +86,36 @@ class TwinEvaluation(BaseModel):
     )
     prior_bias_flags: List[str] = Field(default_factory=list)
     evaluated_at: datetime
+    case_details: List[EvaluationCaseDetail] = Field(default_factory=list)
+    fidelity_score_id: Optional[str] = None
+
+
+class OutcomeRecord(BaseModel):
+    outcome_id: str
+    trace_id: str
+    user_id: str
+    actual_choice: str
+    actual_reasoning: Optional[str] = None
+    outcome_source: OutcomeSource
+    prediction_rank: Optional[int] = Field(default=None, ge=1)
+    confidence_at_prediction: float = confidence_field()
+    time_to_outcome_hours: Optional[float] = Field(default=None, ge=0)
+    domain: DomainEnum
+    task_type: Optional[str] = None
+    created_at: datetime
+
+    @computed_field
+    @property
+    def choice_matched_prediction(self) -> bool:
+        return self.prediction_rank == 1
+
+    @field_validator("task_type", mode="before")
+    @classmethod
+    def _canonicalize(cls, v):
+        return canonicalize_task_type(v) if v else v
+
+    @model_validator(mode="after")
+    def _validate_outcome_source(self):
+        if self.outcome_source == OutcomeSource.USER_REFLECTION and not self.actual_reasoning:
+            raise ValueError("USER_REFLECTION requires actual_reasoning")
+        return self
