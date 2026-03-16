@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-twin-runtime = "twin_runtime.cli:main"
+twin-runtime = "twin_runtime.interfaces.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
