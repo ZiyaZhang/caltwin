@@ -81,6 +81,17 @@ class TwinStore:
         shutil.copy2(src, current)
         return twin
 
+    # --- Protocol-compliant methods (TwinStateStore port) ---
+
+    def save_state(self, state: TwinState) -> str:
+        """Protocol-compliant: save TwinState, return version string."""
+        self.save(state)
+        return state.state_version
+
+    def load_state(self, user_id: str, version: Optional[str] = None) -> TwinState:
+        """Protocol-compliant: load TwinState."""
+        return self.load(user_id, version)
+
     def delete_user(self, user_id: str) -> None:
         """Delete all data for a user."""
         user_dir = self.base_dir / user_id

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 from typing import List, Optional
 
 from twin_runtime.domain.models.calibration import CalibrationCase, CandidateCalibrationCase, TwinEvaluation
@@ -24,9 +25,10 @@ class CalibrationStore:
 
     # --- Candidates ---
 
-    def save_candidate(self, candidate: CandidateCalibrationCase) -> None:
+    def save_candidate(self, candidate: CandidateCalibrationCase) -> str:
         path = self.base / "candidates" / f"{candidate.candidate_id}.json"
         path.write_text(candidate.model_dump_json(indent=2))
+        return candidate.candidate_id
 
     def load_candidate(self, candidate_id: str) -> CandidateCalibrationCase:
         path = self.base / "candidates" / f"{candidate_id}.json"
@@ -42,9 +44,10 @@ class CalibrationStore:
 
     # --- Cases ---
 
-    def save_case(self, case: CalibrationCase) -> None:
+    def save_case(self, case: CalibrationCase) -> str:
         path = self.base / "cases" / f"{case.case_id}.json"
         path.write_text(case.model_dump_json(indent=2))
+        return case.case_id
 
     def load_case(self, case_id: str) -> CalibrationCase:
         path = self.base / "cases" / f"{case_id}.json"
@@ -60,9 +63,10 @@ class CalibrationStore:
 
     # --- Evaluations ---
 
-    def save_evaluation(self, evaluation: TwinEvaluation) -> None:
+    def save_evaluation(self, evaluation: TwinEvaluation) -> str:
         path = self.base / "evaluations" / f"{evaluation.evaluation_id}.json"
         path.write_text(evaluation.model_dump_json(indent=2))
+        return evaluation.evaluation_id
 
     def list_evaluations(self) -> List[TwinEvaluation]:
         evals = []
@@ -72,12 +76,16 @@ class CalibrationStore:
 
     # --- Events ---
 
-    def save_event(self, event: RuntimeEvent) -> None:
+    def save_event(self, event: RuntimeEvent) -> str:
         path = self.base / "events" / f"{event.event_id}.json"
         path.write_text(event.model_dump_json(indent=2))
+        return event.event_id
 
-    def list_events(self) -> List[RuntimeEvent]:
+    def list_events(self, since: Optional[datetime] = None) -> List[RuntimeEvent]:
         events = []
         for f in sorted((self.base / "events").glob("*.json")):
-            events.append(RuntimeEvent(**json.loads(f.read_text())))
+            ev = RuntimeEvent(**json.loads(f.read_text()))
+            if since is not None and ev.observed_at < since:
+                continue
+            events.append(ev)
         return events
