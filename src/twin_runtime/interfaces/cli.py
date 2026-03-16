@@ -45,10 +45,10 @@ def dashboard_command(output: str = "fidelity_report.html", open_browser: bool =
     # fall back to fixture if not available
     twin = None
     try:
-        from twin_runtime.infrastructure.backends.json_file.twin_state_store import TwinStateStore
-        twin_store = TwinStateStore(_STORE_DIR, _USER_ID)
-        twin = twin_store.load(latest_score.twin_state_version)
-    except Exception:
+        from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+        twin_store = TwinStore(_STORE_DIR)
+        twin = twin_store.load(_USER_ID, latest_score.twin_state_version)
+    except (FileNotFoundError, KeyError):
         pass
     if twin is None:
         with open(_FIXTURE) as f:

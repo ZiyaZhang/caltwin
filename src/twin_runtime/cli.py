@@ -298,11 +298,17 @@ def cmd_config(args):
     """Get/set configuration."""
     config = _load_config()
     if args.action == "set":
+        if not args.key or not args.value:
+            print("Usage: twin-runtime config set <key> <value>")
+            return
         config[args.key] = args.value
         _save_config(config)
         _write_env(config)
         print(f"Set {args.key} = {_mask(args.value) if 'key' in args.key.lower() or 'token' in args.key.lower() else args.value}")
     elif args.action == "get":
+        if not args.key:
+            print("Usage: twin-runtime config get <key>")
+            return
         val = config.get(args.key, "(not set)")
         print(f"{args.key} = {_mask(val) if 'key' in args.key.lower() or 'token' in args.key.lower() else val}")
     elif args.action == "list":

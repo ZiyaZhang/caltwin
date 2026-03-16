@@ -16,7 +16,7 @@ from twin_runtime.application.pipeline.runner import run as run_pipeline
 from twin_runtime.application.calibration.event_collector import collect_event, collect_manual_case
 from twin_runtime.application.calibration.case_manager import promote_candidate
 from twin_runtime.application.calibration.state_updater import apply_evaluation
-from twin_runtime.application.calibration.fidelity_evaluator import _choice_similarity
+from twin_runtime.application.calibration.fidelity_evaluator import choice_similarity
 from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
 from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 from twin_runtime.domain.models.calibration import TwinEvaluation
@@ -147,7 +147,7 @@ def test_full_cycle():
         print(f"    Stored evaluations: {len(evals)}")
 
         # Assertions
-        assert updated_twin.state_version == "v002"
+        assert updated_twin.state_version == "v003"
         assert updated_twin.shared_decision_core.evidence_count > twin.shared_decision_core.evidence_count
         assert len(versions) == 2
         assert len(events) == 1
