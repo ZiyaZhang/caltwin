@@ -1,0 +1,10 @@
+"""Port: LLM interaction."""
+from __future__ import annotations
+from typing import Any, Dict, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class LLMPort(Protocol):
+    """Abstract LLM client for testability."""
+    def ask_json(self, system: str, user: str, max_tokens: int = 1024) -> Dict[str, Any]: ...
+    def ask_text(self, system: str, user: str, max_tokens: int = 1024) -> str: ...

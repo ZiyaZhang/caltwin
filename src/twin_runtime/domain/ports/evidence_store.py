@@ -1,0 +1,16 @@
+"""Port: Evidence fragment storage and querying."""
+from __future__ import annotations
+from typing import Dict, List, Optional, Protocol, runtime_checkable
+from twin_runtime.domain.evidence.base import EvidenceFragment
+from twin_runtime.domain.evidence.clustering import EvidenceCluster
+from twin_runtime.domain.models.recall_query import RecallQuery
+
+
+@runtime_checkable
+class EvidenceStore(Protocol):
+    """Store and query evidence fragments."""
+    def store_fragment(self, fragment: EvidenceFragment) -> str: ...
+    def store_cluster(self, cluster: EvidenceCluster) -> str: ...
+    def query(self, query: RecallQuery) -> List[EvidenceFragment]: ...
+    def get_by_hash(self, content_hash: str) -> Optional[EvidenceFragment]: ...
+    def count(self, user_id: str, filters: Optional[Dict] = None) -> int: ...
