@@ -142,11 +142,17 @@ def evaluate_single_case(
         twin=twin,
     )
 
-    # Extract twin's ranking from first head assessment
+    # Extract twin's ranking — prefer the head matching this case's domain,
+    # fall back to highest-confidence head if no domain match
     prediction_ranking: list[str] = []
-    for ha in trace.head_assessments:
-        prediction_ranking = ha.option_ranking
-        break
+    target_domain = case.domain_label
+    domain_match = [ha for ha in trace.head_assessments if ha.domain == target_domain]
+    if domain_match:
+        prediction_ranking = domain_match[0].option_ranking
+    elif trace.head_assessments:
+        # Fallback: highest-confidence head
+        best = max(trace.head_assessments, key=lambda h: getattr(h, 'confidence', 0))
+        prediction_ranking = best.option_ranking
 
     choice_score, rank = choice_similarity(prediction_ranking, case.actual_choice)
     reasoning_score = _reasoning_similarity(
@@ -168,6 +174,8 @@ def evaluate_single_case(
 def evaluate_fidelity(
     cases: List[CalibrationCase],
     twin: TwinState,
+    *,
+    strict: bool = False,
 ) -> TwinEvaluation:
     """Run fidelity evaluation across multiple calibration cases.
 
@@ -183,10 +191,17 @@ def evaluate_fidelity(
     case_ids: list[str] = []
     case_details: list[EvaluationCaseDetail] = []
 
+    error_count = 0
+    failed_case_ids: list[str] = []
+
     for case in cases:
         try:
             result = evaluate_single_case(case, twin)
         except Exception as e:
+            if strict:
+                raise
+            error_count += 1
+            failed_case_ids.append(case.case_id)
             print(f"  ERROR on case {case.case_id}: {e}")
             result = SingleCaseResult(
                 choice_score=0.0, reasoning_score=None, rank=None,
@@ -408,4 +423,5 @@ def compute_fidelity_score(
         overall_confidence=round(overall_confidence, 4),
         total_cases=len(details),
         domain_breakdown=domain_breakdown,
+        evaluation_ids=[evaluation.evaluation_id],
     )

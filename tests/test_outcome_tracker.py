@@ -27,6 +27,7 @@ class TestRecordOutcome:
         cal_store = MagicMock()
         cal_store.save_outcome.return_value = "out-1"
         twin = MagicMock()
+        twin.user_id = "user-ziya"
 
         outcome, update = record_outcome(
             trace_id="t-1",
@@ -47,6 +48,7 @@ class TestRecordOutcome:
         trace_store.load_trace.return_value = trace
         cal_store = MagicMock()
         twin = MagicMock()
+        twin.user_id = "user-ziya"
 
         outcome, _ = record_outcome(
             trace_id="t-1",
@@ -65,6 +67,7 @@ class TestRecordOutcome:
         trace_store.load_trace.return_value = trace
         cal_store = MagicMock()
         twin = MagicMock()
+        twin.user_id = "user-ziya"
 
         _, update = record_outcome(
             trace_id="t-1",

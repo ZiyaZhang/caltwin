@@ -31,7 +31,7 @@ def dashboard_command(output: str = "fidelity_report.html", open_browser: bool =
 
     latest_score = scores[0]
     # Find associated evaluation — try evaluation_ids first, fall back to latest
-    eval_ids = getattr(latest_score, 'evaluation_ids', None) or []
+    eval_ids = latest_score.evaluation_ids or []
     evals = store.list_evaluations()
     if eval_ids:
         evaluation = next((e for e in evals if e.evaluation_id == eval_ids[-1]), None)
@@ -41,8 +41,18 @@ def dashboard_command(output: str = "fidelity_report.html", open_browser: bool =
         print("No evaluation found. Run: python tools/batch_evaluate.py")
         return
 
-    with open(_FIXTURE) as f:
-        twin = TwinState(**json.load(f))
+    # Try to load twin matching the score's version from TwinStore,
+    # fall back to fixture if not available
+    twin = None
+    try:
+        from twin_runtime.infrastructure.backends.json_file.twin_state_store import TwinStateStore
+        twin_store = TwinStateStore(_STORE_DIR, _USER_ID)
+        twin = twin_store.load(latest_score.twin_state_version)
+    except Exception:
+        pass
+    if twin is None:
+        with open(_FIXTURE) as f:
+            twin = TwinState(**json.load(f))
 
     biases = store.list_detected_biases()
     payload = DashboardPayload(

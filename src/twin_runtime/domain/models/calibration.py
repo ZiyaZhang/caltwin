@@ -192,6 +192,7 @@ class TwinFidelityScore(BaseModel):
     overall_confidence: float = confidence_field()
     total_cases: int = Field(ge=0)
     domain_breakdown: Dict[str, float] = Field(default_factory=dict)
+    evaluation_ids: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
 
     @model_validator(mode="after")

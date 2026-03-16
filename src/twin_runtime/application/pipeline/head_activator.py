@@ -30,15 +30,28 @@ def _format_evidence(evidence: List[EvidenceFragment]) -> str:
 def _find_bias_corrections(
     domain: DomainEnum,
     corrections: List[BiasCorrectionEntry],
+    task_type: Optional[str] = None,
 ) -> List[BiasCorrectionEntry]:
-    """Find active bias corrections that apply to this domain."""
+    """Find active bias corrections that apply to this domain + task_type.
+
+    Matching rules:
+    - scope has domain → must match
+    - scope has task_type → must match (if caller provides task_type)
+    - scope has task_type but caller has no task_type → skip (don't over-apply)
+    """
     matched = []
     for bc in corrections:
         if not bc.still_active:
             continue
         scope = bc.target_scope
+        # Domain filter
         if scope.get("domain") and scope["domain"] != domain.value:
             continue
+        # Task type filter — scope-specific corrections only apply when task_type matches
+        scope_task = scope.get("task_type")
+        if scope_task:
+            if not task_type or task_type != scope_task:
+                continue
         matched.append(bc)
     return matched
 

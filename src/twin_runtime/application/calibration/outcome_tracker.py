@@ -37,7 +37,7 @@ def record_outcome(
     outcome = OutcomeRecord(
         outcome_id=str(uuid.uuid4()),
         trace_id=trace_id,
-        user_id=trace.twin_state_version,  # placeholder — real user_id from twin
+        user_id=getattr(twin, 'user_id', 'unknown'),
         actual_choice=actual_choice,
         actual_reasoning=actual_reasoning,
         outcome_source=source,
