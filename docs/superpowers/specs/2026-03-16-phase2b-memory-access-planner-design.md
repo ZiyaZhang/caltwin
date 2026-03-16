@@ -52,6 +52,9 @@ class MemoryAccessPlan(BaseModel):
     freshness_preference: Literal["recent_first", "historical_first", "balanced"]
     disabled_evidence_types: List[EvidenceType]  # Types to skip
     rationale: str                    # Human-readable explanation (auditable)
+    # Domain gating — Planner decides which heads to activate
+    domains_to_activate: List[DomainEnum]         # Only these domains get activated
+    skipped_domains: Dict[DomainEnum, str] = {}   # e.g. {"money": "reliability 0.30 < 0.50"}
 
 
 class EnrichedActivationContext(BaseModel):
@@ -99,6 +102,10 @@ def plan_memory_access(
 ```
 
 The function both plans AND executes (issues queries against the store). This is intentional — the planner owns the full retrieval lifecycle. Separation into plan-then-execute adds complexity with no benefit at this stage.
+
+The planner also owns **domain gating**: it decides which domains to activate based on the SituationFrame's `domain_activation_vector` and the TwinState's available heads. The `domains_to_activate` field in the plan tells Head Activator which heads to spin up — rather than activating all heads unconditionally. The `skipped_domains` dict records why each skipped domain was excluded (e.g. low reliability, no head data).
+
+**LLM fallback stub:** When no rules match, the planner returns an empty plan. A `_llm_fallback_plan()` stub is included for future LLM-based planning when ambiguity > 0.7, but returns `None` for now.
 
 ---
 
@@ -159,6 +166,8 @@ def run(
 ```
 
 `run()` passes `llm` to all stages and `evidence_store` to the planner.
+
+> **ARCHITECTURE NOTE:** The `None` → `DefaultLLM` fallback in `run()` uses a lazy import from `interfaces/defaults.py`, which itself imports `infrastructure/`. This means `application/pipeline/runner.py` has a transitive runtime dependency on `infrastructure/` via a function-level lazy import. This is an acceptable pragmatic choice for v0.1 — a strict composition root in `interfaces/` would require changing CLI + all call sites. Phase 4 (MCP Server) will naturally introduce a proper composition root, making this clean.
 
 ### 2.5 Compiler DI
 
@@ -233,8 +242,10 @@ Add optional fields to `RuntimeDecisionTrace`:
 ```python
 class RuntimeDecisionTrace(BaseModel):
     # ... existing fields ...
+    # Phase 2b audit fields:
     memory_access_plan: Optional[MemoryAccessPlan] = None
     retrieved_evidence_count: int = 0
+    skipped_domains: Dict[str, str] = Field(default_factory=dict)  # e.g. {"money": "reliability 0.30 < 0.50"}
 ```
 
 ---
