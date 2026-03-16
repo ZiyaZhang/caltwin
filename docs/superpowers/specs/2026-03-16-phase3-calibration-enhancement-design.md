@@ -171,7 +171,14 @@ class TwinFidelityScore(BaseModel):
     overall_confidence: float = confidence_field()  # min(four confidence_in_metric)
 
     total_cases: int = Field(ge=0)
-    domain_breakdown: Dict[str, float] = Field(default_factory=dict)  # values clamped to [0,1] at compute time
+    domain_breakdown: Dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_domain_breakdown_range(self):
+        for domain, value in self.domain_breakdown.items():
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"domain_breakdown[{domain}] = {value} not in [0, 1]")
+        return self
     evaluation_ids: List[str] = Field(default_factory=list)
 
     ECE_BIN_EDGES: ClassVar[List[float]] = [0.0, 0.3, 0.6, 1.0]
@@ -278,7 +285,7 @@ JSON backend: each new object type gets a subdirectory (`outcomes/`, `detected_b
 def choice_similarity(prediction_ranking: List[str], actual_choice: str) -> tuple[float, Optional[int]]:
     """Returns (score, rank). rank=None means miss.
 
-    Three-tier matching:
+    Four-step matching:
     1. Normalize: lowercase + strip + remove punctuation
     2. Exact match on normalized strings
     3. Alias table match (if CalibrationCase provides aliases)
