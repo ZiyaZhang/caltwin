@@ -1,17 +1,12 @@
-"""Data source adapters for evidence extraction.
-
-Each adapter connects to a data source and produces EvidenceFragments
-that feed into the persona compiler.
-"""
-
-from .base import SourceAdapter, EvidenceFragment, EvidenceType
-from .registry import SourceRegistry
-from .openclaw_adapter import OpenClawAdapter
-from .document_adapter import DocumentAdapter
-from .notion_adapter import NotionAdapter
-from .gmail_adapter import GmailAdapter
-from .calendar_adapter import CalendarAdapter
-from .evidence_types import (
+"""Backward-compat shim."""
+from twin_runtime.domain.evidence.base import SourceAdapter, EvidenceFragment, EvidenceType
+from twin_runtime.infrastructure.sources.registry import SourceRegistry
+from twin_runtime.infrastructure.sources.openclaw_adapter import OpenClawAdapter
+from twin_runtime.infrastructure.sources.document_adapter import DocumentAdapter
+from twin_runtime.infrastructure.sources.notion_adapter import NotionAdapter
+from twin_runtime.infrastructure.sources.gmail_adapter import GmailAdapter
+from twin_runtime.infrastructure.sources.calendar_adapter import CalendarAdapter
+from twin_runtime.domain.evidence.types import (
     DecisionEvidence, PreferenceEvidence, BehaviorEvidence,
     ReflectionEvidence, InteractionStyleEvidence, ContextEvidence,
     migrate_fragment,
