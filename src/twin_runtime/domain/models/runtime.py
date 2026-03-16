@@ -54,6 +54,15 @@ class RuntimeDecisionTrace(BaseModel):
     uncertainty: float = confidence_field()
     refusal_or_degrade_reason: Optional[str] = None
     output_text: Optional[str] = None
+    memory_access_plan: Optional[Any] = Field(
+        default=None, description="MemoryAccessPlan used for this decision (audit)"
+    )
+    retrieved_evidence_count: int = Field(
+        default=0, description="Number of evidence fragments retrieved by planner"
+    )
+    skipped_domains: Dict[str, str] = Field(
+        default_factory=dict, description="Domains skipped by planner gating, with reasons"
+    )
     created_at: datetime
 
 
