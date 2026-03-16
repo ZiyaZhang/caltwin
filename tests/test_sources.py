@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from twin_runtime.sources.base import EvidenceFragment, EvidenceType, SourceAdapter
-from twin_runtime.sources.registry import SourceRegistry
-from twin_runtime.sources.openclaw_adapter import OpenClawAdapter
-from twin_runtime.sources.document_adapter import DocumentAdapter
+from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType, SourceAdapter
+from twin_runtime.infrastructure.sources.registry import SourceRegistry
+from twin_runtime.infrastructure.sources.openclaw_adapter import OpenClawAdapter
+from twin_runtime.infrastructure.sources.document_adapter import DocumentAdapter
 
 
 class DummyAdapter(SourceAdapter):
@@ -48,7 +48,7 @@ class TestEvidenceFragment:
         assert f.temporal_weight == 1.0
 
     def test_fragment_with_domain_hint(self):
-        from twin_runtime.models.primitives import DomainEnum
+        from twin_runtime.domain.models.primitives import DomainEnum
         f = EvidenceFragment(
             source_type="test",
             source_id="id-2",
@@ -171,7 +171,7 @@ class TestOpenClawAdapter:
             assert meta["source_type"] == "openclaw"
 
     def test_scan_returns_typed_fragments(self):
-        from twin_runtime.sources.evidence_types import ContextEvidence
+        from twin_runtime.domain.evidence.types import ContextEvidence
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "CLAUDE.md").write_text("# Project instructions\nUse Python 3.9+")
             adapter = OpenClawAdapter(tmpdir)

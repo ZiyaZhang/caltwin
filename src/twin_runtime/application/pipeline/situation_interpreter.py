@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel, ScopeStatus, UncertaintyType, OptionStructure
 from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, ScopeDeclaration
-from twin_runtime.runtime.llm_client import ask_json
+from twin_runtime.infrastructure.llm.client import ask_json
 
 
 # --- Stage 1: Rule-based hard signal extraction ---

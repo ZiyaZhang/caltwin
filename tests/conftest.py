@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from twin_runtime.models import TwinState
+from twin_runtime.domain.models import TwinState
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

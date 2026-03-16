@@ -22,7 +22,8 @@ from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 from twin_runtime.domain.evidence.types import (
     DecisionEvidence, PreferenceEvidence, ReflectionEvidence,
 )
-from twin_runtime.sources.registry import SourceRegistry
+from twin_runtime.infrastructure.sources.registry import SourceRegistry
+from twin_runtime.infrastructure.llm.client import ask_json
 
 
 class EvidenceGraph:
@@ -143,9 +144,9 @@ class PersonaCompiler:
 {chr(10).join(evidence_lines)}"""
 
         # Late import via module reference so unittest.mock.patch on
-        # twin_runtime.compiler.compiler.ask_json (backward-compat shim) works.
-        import twin_runtime.compiler.compiler as _cc
-        return _cc.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+        # twin_runtime.application.compiler.persona_compiler.ask_json works.
+        import twin_runtime.application.compiler.persona_compiler as _self_mod
+        return _self_mod.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
 
     def compile(
         self,
@@ -247,13 +248,13 @@ class PersonaCompiler:
         below threshold (twin will DEGRADE/REFUSE). With some evidence: set what
         we can, leave the rest at median.
         """
-        from twin_runtime.models.twin_state import (
+        from twin_runtime.domain.models.twin_state import (
             TwinState, SharedDecisionCore, CausalBeliefModel,
             DomainHead, EvidenceWeightProfile, TransferCoefficient,
             ReliabilityProfileEntry, ScopeDeclaration, TemporalMetadata,
             RejectionPolicyMap,
         )
-        from twin_runtime.models.primitives import (
+        from twin_runtime.domain.models.primitives import (
             DomainEnum, ConflictStyle, ControlOrientation,
             MergeStrategy, ReliabilityScopeStatus,
         )

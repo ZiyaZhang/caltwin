@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from twin_runtime.sources.evidence_types import DecisionEvidence, BehaviorEvidence
-from twin_runtime.sources.clustering import deduplicate, EvidenceCluster
+from twin_runtime.domain.evidence.types import DecisionEvidence, BehaviorEvidence
+from twin_runtime.domain.evidence.clustering import deduplicate, EvidenceCluster
 
 
 NOW = datetime.now(timezone.utc)

@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from twin_runtime.sources.base import EvidenceType
-from twin_runtime.sources.evidence_types import (
+from twin_runtime.domain.evidence.base import EvidenceType
+from twin_runtime.domain.evidence.types import (
     BehaviorEvidence,
     ContextEvidence,
     DecisionEvidence,
@@ -13,7 +13,7 @@ from twin_runtime.sources.evidence_types import (
     PreferenceEvidence,
     ReflectionEvidence,
 )
-from twin_runtime.models.primitives import DomainEnum, OrdinalTriLevel
+from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel
 
 
 NOW = datetime.now(timezone.utc)
@@ -161,8 +161,8 @@ class TestContextEvidence:
 
 class TestMigrateLegacyFragment:
     def test_migrate_flat_decision(self):
-        from twin_runtime.sources.evidence_types import migrate_fragment
-        from twin_runtime.sources.base import EvidenceFragment
+        from twin_runtime.domain.evidence.types import migrate_fragment
+        from twin_runtime.domain.evidence.base import EvidenceFragment
 
         legacy = EvidenceFragment(
             source_type="gmail",
@@ -183,8 +183,8 @@ class TestMigrateLegacyFragment:
         assert typed.user_id == "user-default"
 
     def test_migrate_flat_behavior(self):
-        from twin_runtime.sources.evidence_types import migrate_fragment
-        from twin_runtime.sources.base import EvidenceFragment
+        from twin_runtime.domain.evidence.types import migrate_fragment
+        from twin_runtime.domain.evidence.base import EvidenceFragment
 
         legacy = EvidenceFragment(
             source_type="calendar",
@@ -200,8 +200,8 @@ class TestMigrateLegacyFragment:
         assert typed.structured_metrics.get("total_events") == 50
 
     def test_migrate_unknown_falls_back_to_context(self):
-        from twin_runtime.sources.evidence_types import migrate_fragment
-        from twin_runtime.sources.base import EvidenceFragment
+        from twin_runtime.domain.evidence.types import migrate_fragment
+        from twin_runtime.domain.evidence.base import EvidenceFragment
 
         legacy = EvidenceFragment(
             source_type="unknown",

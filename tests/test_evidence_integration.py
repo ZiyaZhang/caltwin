@@ -3,12 +3,12 @@
 
 from datetime import datetime, timezone
 
-from twin_runtime.sources.evidence_types import (
+from twin_runtime.domain.evidence.types import (
     DecisionEvidence, PreferenceEvidence, BehaviorEvidence,
     ContextEvidence, ReflectionEvidence, migrate_fragment,
 )
-from twin_runtime.sources.clustering import deduplicate, EvidenceCluster
-from twin_runtime.sources.base import EvidenceFragment, EvidenceType
+from twin_runtime.domain.evidence.clustering import deduplicate, EvidenceCluster
+from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 
 
 NOW = datetime.now(timezone.utc)
@@ -71,8 +71,8 @@ class TestEvidenceFlowIntegration:
 
     def test_cold_start_produces_valid_twin(self):
         """Cold start twin can be created and has correct defaults."""
-        from twin_runtime.compiler.compiler import PersonaCompiler
-        from twin_runtime.sources.registry import SourceRegistry
+        from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
+        from twin_runtime.infrastructure.sources.registry import SourceRegistry
 
         compiler = PersonaCompiler(SourceRegistry())
         twin = compiler._create_initial(user_id="new-user", fragments=[])

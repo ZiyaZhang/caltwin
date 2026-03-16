@@ -14,17 +14,17 @@ from unittest.mock import patch
 
 import pytest
 
-from twin_runtime.compiler.compiler import PersonaCompiler
-from twin_runtime.sources.base import EvidenceFragment, EvidenceType
-from twin_runtime.sources.evidence_types import (
+from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
+from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
+from twin_runtime.domain.evidence.types import (
     DecisionEvidence,
     PreferenceEvidence,
     ReflectionEvidence,
     BehaviorEvidence,
     ContextEvidence,
 )
-from twin_runtime.models.primitives import DomainEnum
-from twin_runtime.sources.registry import SourceRegistry
+from twin_runtime.domain.models.primitives import DomainEnum
+from twin_runtime.infrastructure.sources.registry import SourceRegistry
 
 
 NOW = datetime.now(timezone.utc)
@@ -51,7 +51,7 @@ def capture_prompt(fragments):
         captured["user_msg"] = user_msg
         return {}
 
-    with patch("twin_runtime.compiler.compiler.ask_json", fake_ask_json):
+    with patch("twin_runtime.application.compiler.persona_compiler.ask_json", fake_ask_json):
         compiler.extract_parameters(fragments)
 
     return captured.get("user_msg", "")

@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timezone
 from pydantic import ValidationError
 
-from twin_runtime.models import (
+from twin_runtime.domain.models import (
     TwinState,
     SharedDecisionCore,
     CausalBeliefModel,

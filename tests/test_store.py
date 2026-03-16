@@ -2,8 +2,8 @@
 
 import pytest
 
-from twin_runtime.models import TwinState
-from twin_runtime.store import TwinStore
+from twin_runtime.domain.models import TwinState
+from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
 
 
 class TestTwinStore:

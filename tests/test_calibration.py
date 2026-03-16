@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from twin_runtime.models.calibration import CalibrationCase, CandidateCalibrationCase, TwinEvaluation
-from twin_runtime.models.primitives import (
+from twin_runtime.domain.models.calibration import CalibrationCase, CandidateCalibrationCase, TwinEvaluation
+from twin_runtime.domain.models.primitives import (
     CandidateSourceType,
     ConflictType,
     DecisionMode,
@@ -18,12 +18,12 @@ from twin_runtime.models.primitives import (
     OrdinalTriLevel,
     RuntimeEventType,
 )
-from twin_runtime.models.runtime import HeadAssessment, RuntimeDecisionTrace
-from twin_runtime.models.twin_state import TwinState
-from twin_runtime.calibration.event_collector import collect_event, collect_manual_case
-from twin_runtime.calibration.case_manager import promote_candidate
-from twin_runtime.calibration.state_updater import apply_evaluation
-from twin_runtime.store.calibration_store import CalibrationStore
+from twin_runtime.domain.models.runtime import HeadAssessment, RuntimeDecisionTrace
+from twin_runtime.domain.models.twin_state import TwinState
+from twin_runtime.application.calibration.event_collector import collect_event, collect_manual_case
+from twin_runtime.application.calibration.case_manager import promote_candidate
+from twin_runtime.application.calibration.state_updater import apply_evaluation
+from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
 
 def _load_twin() -> TwinState:

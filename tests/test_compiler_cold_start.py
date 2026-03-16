@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from twin_runtime.compiler.compiler import PersonaCompiler
-from twin_runtime.sources.registry import SourceRegistry
-from twin_runtime.sources.evidence_types import PreferenceEvidence, ContextEvidence
-from twin_runtime.models.twin_state import TwinState
+from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
+from twin_runtime.infrastructure.sources.registry import SourceRegistry
+from twin_runtime.domain.evidence.types import PreferenceEvidence, ContextEvidence
+from twin_runtime.domain.models.twin_state import TwinState
 
 
 class TestColdStart:

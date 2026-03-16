@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from twin_runtime.sources.gmail_adapter import GmailAdapter, _ALL_KEYWORDS
-from twin_runtime.sources.calendar_adapter import CalendarAdapter
-from twin_runtime.sources.base import EvidenceType
+from twin_runtime.infrastructure.sources.gmail_adapter import GmailAdapter, _ALL_KEYWORDS
+from twin_runtime.infrastructure.sources.calendar_adapter import CalendarAdapter
+from twin_runtime.domain.evidence.base import EvidenceType
 
 
 class TestGmailAdapter:
@@ -29,7 +29,7 @@ class TestGmailAdapter:
         dt = GmailAdapter._parse_email_date("invalid date")
         assert dt.year >= 2026  # Falls back to now
 
-    @patch("twin_runtime.sources.gmail_adapter.GmailAdapter._get_service")
+    @patch("twin_runtime.infrastructure.sources.gmail_adapter.GmailAdapter._get_service")
     def test_scan_returns_fragments(self, mock_service):
         # Mock Gmail API response
         mock_svc = MagicMock()
@@ -58,7 +58,7 @@ class TestGmailAdapter:
         assert fragments[0].evidence_type == EvidenceType.DECISION
         assert "gmail:" in fragments[0].source_id
 
-    @patch("twin_runtime.sources.gmail_adapter.GmailAdapter._get_service")
+    @patch("twin_runtime.infrastructure.sources.gmail_adapter.GmailAdapter._get_service")
     def test_scan_returns_typed_decision_evidence(self, mock_service):
         mock_svc = MagicMock()
         mock_service.return_value = mock_svc
@@ -81,7 +81,7 @@ class TestGmailAdapter:
         fragments = adapter.scan()
         assert len(fragments) == 1
 
-        from twin_runtime.sources.evidence_types import DecisionEvidence
+        from twin_runtime.domain.evidence.types import DecisionEvidence
         assert isinstance(fragments[0], DecisionEvidence)
         assert fragments[0].occurred_at is not None
         assert fragments[0].valid_from is not None
@@ -117,7 +117,7 @@ class TestCalendarAdapter:
         }
         assert CalendarAdapter._event_duration(event) == 90
 
-    @patch("twin_runtime.sources.calendar_adapter.CalendarAdapter._get_service")
+    @patch("twin_runtime.infrastructure.sources.calendar_adapter.CalendarAdapter._get_service")
     def test_scan_returns_fragments(self, mock_service):
         mock_svc = MagicMock()
         mock_service.return_value = mock_svc
@@ -172,7 +172,7 @@ class TestCalendarAdapter:
         result = adapter._extract_patterns([{"start": {}, "end": {}}] * 3)
         assert result is None  # Too few events
 
-    @patch("twin_runtime.sources.calendar_adapter.CalendarAdapter._get_service")
+    @patch("twin_runtime.infrastructure.sources.calendar_adapter.CalendarAdapter._get_service")
     def test_scan_returns_typed_behavior_evidence(self, mock_service):
         mock_svc = MagicMock()
         mock_service.return_value = mock_svc
@@ -198,6 +198,6 @@ class TestCalendarAdapter:
         adapter._service = mock_svc
         fragments = adapter.scan()
 
-        from twin_runtime.sources.evidence_types import BehaviorEvidence
+        from twin_runtime.domain.evidence.types import BehaviorEvidence
         for f in fragments:
             assert isinstance(f, BehaviorEvidence)

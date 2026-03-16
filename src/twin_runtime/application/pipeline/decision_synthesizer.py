@@ -14,7 +14,7 @@ from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, Merg
 from twin_runtime.domain.models.runtime import ConflictReport, HeadAssessment, RuntimeDecisionTrace
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState
-from twin_runtime.runtime.llm_client import ask_text
+from twin_runtime.infrastructure.llm.client import ask_text
 
 
 def _synthesize_decision(

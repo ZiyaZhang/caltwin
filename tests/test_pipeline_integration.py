@@ -7,8 +7,8 @@ import sys
 # Ensure src is on path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from twin_runtime.models.twin_state import TwinState
-from twin_runtime.runtime import run
+from twin_runtime.domain.models.twin_state import TwinState
+from twin_runtime.application.pipeline.runner import run
 
 
 def load_twin() -> TwinState:

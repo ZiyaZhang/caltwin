@@ -23,8 +23,8 @@ from pathlib import Path
 # Ensure src is on path when running directly
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from twin_runtime.models.twin_state import TwinState
-from twin_runtime.store.twin_store import TwinStore
+from twin_runtime.domain.models.twin_state import TwinState
+from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
 
 _CONFIG_DIR = Path.home() / ".twin-runtime"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
@@ -140,7 +140,7 @@ def cmd_run(args):
     config = _load_config()
     _apply_env(config)
 
-    from twin_runtime.runtime import run as run_pipeline
+    from twin_runtime.application.pipeline.runner import run as run_pipeline
 
     twin = _get_twin(config)
     trace = run_pipeline(
@@ -197,7 +197,7 @@ def cmd_compile(args):
     config = _load_config()
     _apply_env(config)
 
-    from twin_runtime.compiler import PersonaCompiler
+    from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
 
     registry = _build_registry(config)
     twin = _get_twin(config)
@@ -220,7 +220,7 @@ def cmd_evaluate(args):
     config = _load_config()
     _apply_env(config)
 
-    from twin_runtime.store.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
     twin = _get_twin(config)
     user_id = config.get("user_id", "default")
@@ -233,7 +233,7 @@ def cmd_evaluate(args):
 
     print(f"Evaluating {len(cases)} cases against twin {twin.state_version}...")
 
-    from twin_runtime.calibration.fidelity_evaluator import evaluate_fidelity
+    from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
     evaluation = evaluate_fidelity(cases, twin)
 
     cal_store.save_evaluation(evaluation)
@@ -314,10 +314,10 @@ def cmd_config(args):
 # --- Helpers ---
 
 def _build_registry(config: dict):
-    from twin_runtime.sources.registry import SourceRegistry
-    from twin_runtime.sources.openclaw_adapter import OpenClawAdapter
-    from twin_runtime.sources.notion_adapter import NotionAdapter
-    from twin_runtime.sources.document_adapter import DocumentAdapter
+    from twin_runtime.infrastructure.sources.registry import SourceRegistry
+    from twin_runtime.infrastructure.sources.openclaw_adapter import OpenClawAdapter
+    from twin_runtime.infrastructure.sources.notion_adapter import NotionAdapter
+    from twin_runtime.infrastructure.sources.document_adapter import DocumentAdapter
 
     registry = SourceRegistry()
 
@@ -334,8 +334,8 @@ def _build_registry(config: dict):
     # Gmail and Calendar require google_credentials
     if config.get("google_credentials"):
         try:
-            from twin_runtime.sources.gmail_adapter import GmailAdapter
-            from twin_runtime.sources.calendar_adapter import CalendarAdapter
+            from twin_runtime.infrastructure.sources.gmail_adapter import GmailAdapter
+            from twin_runtime.infrastructure.sources.calendar_adapter import CalendarAdapter
             registry.register(GmailAdapter(credentials_path=config["google_credentials"]))
             registry.register(CalendarAdapter(credentials_path=config["google_credentials"]))
         except ImportError:

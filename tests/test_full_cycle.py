@@ -10,16 +10,16 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from twin_runtime.models.primitives import DomainEnum, OrdinalTriLevel
-from twin_runtime.models.twin_state import TwinState
-from twin_runtime.runtime import run as run_pipeline
-from twin_runtime.calibration.event_collector import collect_event, collect_manual_case
-from twin_runtime.calibration.case_manager import promote_candidate
-from twin_runtime.calibration.state_updater import apply_evaluation
-from twin_runtime.calibration.fidelity_evaluator import _choice_similarity
-from twin_runtime.store.twin_store import TwinStore
-from twin_runtime.store.calibration_store import CalibrationStore
-from twin_runtime.models.calibration import TwinEvaluation
+from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel
+from twin_runtime.domain.models.twin_state import TwinState
+from twin_runtime.application.pipeline.runner import run as run_pipeline
+from twin_runtime.application.calibration.event_collector import collect_event, collect_manual_case
+from twin_runtime.application.calibration.case_manager import promote_candidate
+from twin_runtime.application.calibration.state_updater import apply_evaluation
+from twin_runtime.application.calibration.fidelity_evaluator import _choice_similarity
+from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+from twin_runtime.domain.models.calibration import TwinEvaluation
 
 import uuid
 from datetime import datetime, timezone

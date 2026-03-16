@@ -12,7 +12,7 @@ from twin_runtime.domain.models.primitives import DomainEnum, confidence_field
 from twin_runtime.domain.models.runtime import HeadAssessment
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedDecisionCore, CausalBeliefModel
-from twin_runtime.runtime.llm_client import ask_json
+from twin_runtime.infrastructure.llm.client import ask_json
 
 
 def _build_head_prompt(

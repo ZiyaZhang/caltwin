@@ -1,13 +1,13 @@
 """Unit tests for runtime components that don't require API calls."""
 
 import pytest
-from twin_runtime.models.primitives import ConflictType, DomainEnum, MergeStrategy
-from twin_runtime.runtime.conflict_arbiter import (
+from twin_runtime.domain.models.primitives import ConflictType, DomainEnum, MergeStrategy
+from twin_runtime.application.pipeline.conflict_arbiter import (
     _detect_ranking_disagreement,
     _detect_utility_conflict,
     arbitrate,
 )
-from twin_runtime.models.runtime import HeadAssessment
+from twin_runtime.domain.models.runtime import HeadAssessment
 
 
 def _make_assessment(domain, ranking, utility, confidence=0.7):
@@ -72,17 +72,17 @@ class TestConflictArbiter:
 
 class TestSituationInterpreterKeywords:
     def test_keyword_scores(self):
-        from twin_runtime.runtime.situation_interpreter import _keyword_scores
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
         scores = _keyword_scores("I need to deploy this project before the deadline")
         assert DomainEnum.WORK in scores
         assert scores[DomainEnum.WORK] > 0
 
     def test_keyword_scores_empty(self):
-        from twin_runtime.runtime.situation_interpreter import _keyword_scores
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
         scores = _keyword_scores("hello world")
         assert scores == {}
 
     def test_keyword_scores_multi_domain(self):
-        from twin_runtime.runtime.situation_interpreter import _keyword_scores
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
         scores = _keyword_scores("Should I invest my salary in career growth?")
         assert len(scores) >= 2
