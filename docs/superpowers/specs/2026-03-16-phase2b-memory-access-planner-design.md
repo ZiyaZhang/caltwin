@@ -68,9 +68,9 @@ The planner inspects the `SituationFrame` and `TwinState` to produce a `MemoryAc
 
 | Situation Signal | RecallQuery Type | Rationale |
 |-----------------|------------------|-----------|
-| High stakes + low uncertainty | `decisions_about` same topic | Verify consistency with past choices |
+| High stakes + low uncertainty (ambiguity < 0.3) | `decisions_about` same topic | Verify consistency with past choices |
 | High ambiguity (> 0.6) | `preference_on_axis` | Check if user has expressed relevant preferences |
-| Multiple domains activated (≥ 2) | Per-domain `by_domain` queries | Gather domain-specific evidence for each head |
+| Multiple domains activated (≥ 2) | Per-domain `by_domain` queries + `state_trajectory` for cross-domain patterns | Gather domain-specific evidence + detect cross-domain value conflicts |
 | Unmodeled domain (no head data) | `by_evidence_type` for ReflectionEvidence | No behavior data, rely on self-reports |
 | Time-sensitive decision | `by_timeline` with recent window | Freshness preference = "recent_first", 30-day limit |
 | Recurring decision type | `similar_situations` | Find past instances of same decision pattern |
@@ -118,24 +118,21 @@ Five direct imports from `infrastructure/` in `application/`:
 
 ### 2.2 Solution: Optional Parameter Injection
 
-Each pipeline stage gains an optional `llm` parameter:
+Each pipeline stage gains an optional `llm` parameter. The `run()` entry point resolves the default (using `interfaces/defaults.py`) and passes it down. Individual stages do NOT fall back to infrastructure imports — they require `llm` from the caller:
 
 ```python
-def interpret_situation(query: str, twin: TwinState, *, llm: Optional[LLMPort] = None) -> SituationFrame:
-    if llm is None:
-        from twin_runtime.infrastructure.llm.client import ask_json
-        llm = _ModuleAdapter(ask_json=ask_json)
-    # ... use llm.ask_json(...)
+def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> SituationFrame:
+    # uses llm.ask_json(...) — no infrastructure import
 ```
 
-The lazy import fallback preserves backward compatibility — existing callers don't need to change. But tests can now pass a mock `LLMPort` instead of monkeypatching.
+Backward compat for direct callers of individual stages (e.g. tests): they must now pass `llm`. The `DefaultLLM` from `interfaces/defaults.py` can be used. The `run()` function handles the `None` → `DefaultLLM` fallback so the top-level API is unchanged.
 
-### 2.3 `_DefaultLLM` Adapter
+### 2.3 `DefaultLLM` Adapter
 
 A thin wrapper that adapts the module-level `ask_json`/`ask_text` functions to the `LLMPort` protocol:
 
 ```python
-class _DefaultLLM:
+class DefaultLLM:
     """Adapts infrastructure.llm.client module functions to LLMPort protocol."""
     def ask_json(self, system: str, user: str, max_tokens: int = 1024):
         from twin_runtime.infrastructure.llm.client import ask_json
@@ -146,7 +143,7 @@ class _DefaultLLM:
         return ask_text(system, user, max_tokens)
 ```
 
-This lives in `application/pipeline/_defaults.py` — a single place for all default infrastructure wiring.
+This lives in `interfaces/defaults.py` — the **interfaces layer** is the correct place for wiring infrastructure to application. The `interfaces/` layer is explicitly allowed to import both `application/` and `infrastructure/`. This ensures the `application/` layer has zero infrastructure imports.
 
 ### 2.4 `run()` Signature
 
@@ -176,7 +173,8 @@ def run(
 ```python
 def run(query, option_set, twin, *, llm=None, evidence_store=None):
     if llm is None:
-        llm = _DefaultLLM()
+        from twin_runtime.interfaces.defaults import DefaultLLM
+        llm = DefaultLLM()
 
     # 1. Situation Interpreter
     frame = interpret_situation(query, twin, llm=llm)
@@ -210,13 +208,13 @@ def activate_heads(
     query: str,
     option_set: List[str],
     context: Union[EnrichedActivationContext, SituationFrame],
-    twin_or_llm: Union[TwinState, None] = None,
+    twin: Optional[TwinState] = None,
     *,
     llm: Optional[LLMPort] = None,
 ) -> List[HeadAssessment]:
 ```
 
-When `context` is `EnrichedActivationContext`, extract `twin` and `frame` from it, and include `retrieved_evidence` in the LLM prompt. When it's a `SituationFrame`, use the old `twin_or_llm` parameter (backward compat).
+When `context` is `EnrichedActivationContext`, extract `twin` and `frame` from it (the `twin` parameter is ignored), and include `retrieved_evidence` in the LLM prompt. When `context` is a `SituationFrame`, `twin` must be provided (backward compat with existing callers).
 
 The LLM prompt for head assessment gains a new section:
 
@@ -248,6 +246,7 @@ class RuntimeDecisionTrace(BaseModel):
 - Each rule in the decision table gets a test: construct a `SituationFrame` with specific signals, verify the `MemoryAccessPlan` contains the expected query types
 - Empty plan when no signals match
 - Empty plan when `evidence_store` is None
+- Graceful fallback when `evidence_store.query()` raises (returns empty evidence, logs warning)
 - Budget enforcement (total and per-query limits)
 
 ### 4.2 DI Tests (~5 tests)
@@ -277,7 +276,7 @@ All 148 existing tests must continue to pass. The DI changes use `Optional` para
 | `domain/models/runtime.py` | domain | MODIFY — add optional planner fields to RuntimeDecisionTrace |
 | `application/planner/__init__.py` | application | CREATE |
 | `application/planner/memory_access_planner.py` | application | CREATE — plan_memory_access() |
-| `application/pipeline/_defaults.py` | application | CREATE — _DefaultLLM adapter |
+| `interfaces/defaults.py` | interfaces | CREATE — DefaultLLM adapter (wiring layer) |
 | `application/pipeline/runner.py` | application | MODIFY — add llm/evidence_store params, planner step |
 | `application/pipeline/situation_interpreter.py` | application | MODIFY — add llm param |
 | `application/pipeline/head_activator.py` | application | MODIFY — accept EnrichedActivationContext, add llm param |
