@@ -1,7 +1,6 @@
-"""Twin Runtime core data models."""
-
-from .primitives import *  # noqa: F401,F403
-from .twin_state import (
+"""Backward-compat shim — real code is in domain.models.*."""
+from twin_runtime.domain.models.primitives import *  # noqa: F401,F403
+from twin_runtime.domain.models.twin_state import (  # noqa: F401
     BiasCorrectionEntry,
     CausalBeliefModel,
     DomainHead,
@@ -15,14 +14,14 @@ from .twin_state import (
     TransferCoefficient,
     TwinState,
 )
-from .situation import SituationFeatureVector, SituationFrame
-from .runtime import (
+from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame  # noqa: F401
+from twin_runtime.domain.models.runtime import (  # noqa: F401
     ConflictReport,
     HeadAssessment,
     RuntimeDecisionTrace,
     RuntimeEvent,
 )
-from .calibration import (
+from twin_runtime.domain.models.calibration import (  # noqa: F401
     CalibrationCase,
     CandidateCalibrationCase,
     TwinEvaluation,
