@@ -26,10 +26,11 @@ class TestPortProtocols:
 
     def test_recall_query_creation(self):
         from twin_runtime.domain.models.recall_query import RecallQuery
+        from twin_runtime.domain.models.primitives import DomainEnum
         q = RecallQuery(
             query_type="by_domain",
             user_id="user-test",
-            target_domain="work",
+            target_domain=DomainEnum.WORK,
         )
         assert q.query_type == "by_domain"
         assert q.limit == 20  # default

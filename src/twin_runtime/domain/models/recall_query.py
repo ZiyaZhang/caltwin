@@ -21,8 +21,8 @@ class RecallQuery(BaseModel):
     sort_by: Literal["recency", "relevance", "confidence"] = "recency"
     # Query-type-specific parameters
     topic_keywords: Optional[List[str]] = None
-    target_domain: Optional[str] = None
-    target_evidence_type: Optional[str] = None
+    target_domain: Optional[DomainEnum] = None
+    target_evidence_type: Optional[EvidenceType] = None
     decision_topic: Optional[str] = None
     preference_dimension: Optional[str] = None
     state_variable: Optional[str] = None
