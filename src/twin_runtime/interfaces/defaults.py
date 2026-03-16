@@ -15,8 +15,8 @@ class DefaultLLM:
 
     def ask_json(self, system: str, user: str, max_tokens: int = 1024) -> Dict[str, Any]:
         from twin_runtime.infrastructure.llm.client import ask_json
-        return ask_json(system, user, max_tokens)
+        return ask_json(system, user, max_tokens=max_tokens)
 
     def ask_text(self, system: str, user: str, max_tokens: int = 1024) -> str:
         from twin_runtime.infrastructure.llm.client import ask_text
-        return ask_text(system, user, max_tokens)
+        return ask_text(system, user, max_tokens=max_tokens)
