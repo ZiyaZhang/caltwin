@@ -95,6 +95,14 @@ class TestPlannerRules:
         assert "by_timeline" in query_types
         assert plan.total_evidence_budget > 10  # expanded
 
+    def test_unmodeled_domain(self):
+        """Unmodeled domain -> by_evidence_type for REFLECTION."""
+        frame = _make_frame(domains={DomainEnum.WORK: 0.9, DomainEnum.MONEY: 0.6})
+        twin = _make_twin(domains=[DomainEnum.WORK])  # no MONEY head
+        plan, _ = plan_memory_access(frame, twin, evidence_store=None)
+        query_types = [q.query_type for q in plan.queries]
+        assert "by_evidence_type" in query_types
+
     def test_no_signals_empty_plan(self):
         """Default signals -> empty queries list."""
         frame = _make_frame(

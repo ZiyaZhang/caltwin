@@ -104,10 +104,14 @@ def activate_heads(
 
     evidence_summary = _format_evidence(evidence)
 
-    # Select heads to activate: domains in activation vector with weight > 0.1
-    active_domains = {
-        d for d, w in frame.domain_activation_vector.items() if w > 0.1
-    }
+    # Select heads to activate: use planner's domain gating when available,
+    # otherwise fall back to raw activation vector (backward compat)
+    if isinstance(context, EnrichedActivationContext) and context.domains_to_activate:
+        active_domains = set(context.domains_to_activate)
+    else:
+        active_domains = {
+            d for d, w in frame.domain_activation_vector.items() if w > 0.1
+        }
 
     # Map domain -> head
     head_map: Dict[DomainEnum, DomainHead] = {

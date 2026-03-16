@@ -42,6 +42,7 @@ def run(
         twin=twin, frame=frame,
         retrieved_evidence=evidence,
         retrieval_rationale=plan.rationale,
+        domains_to_activate=plan.domains_to_activate,
     )
     assessments = activate_heads(query, option_set, context, llm=llm)
 

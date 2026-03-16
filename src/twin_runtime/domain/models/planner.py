@@ -35,3 +35,4 @@ class EnrichedActivationContext(BaseModel):
     frame: SituationFrame
     retrieved_evidence: List[EvidenceFragment] = Field(default_factory=list)
     retrieval_rationale: str = ""
+    domains_to_activate: List[DomainEnum] = Field(default_factory=list)
