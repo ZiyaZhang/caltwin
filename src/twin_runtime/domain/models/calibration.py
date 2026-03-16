@@ -174,6 +174,7 @@ class FidelityMetric(BaseModel):
     value: float = confidence_field()
     confidence_in_metric: float = confidence_field()
     case_count: int = Field(ge=0)
+    details: Optional[Dict[str, Any]] = None
 
 
 class TwinFidelityScore(BaseModel):
