@@ -24,4 +24,7 @@ class JsonFileTraceStore:
         return RuntimeDecisionTrace.model_validate_json(path.read_text())
 
     def list_traces(self, user_id: str, limit: int = 50) -> List[str]:
-        return [p.stem for p in sorted(self.base.glob("*.json"))[:limit]]
+        user_dir = self.base / user_id
+        if not user_dir.is_dir():
+            return []
+        return [p.stem for p in sorted(user_dir.glob("*.json"))[:limit]]

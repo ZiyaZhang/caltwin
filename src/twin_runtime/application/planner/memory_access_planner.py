@@ -44,18 +44,23 @@ def _compute_domain_gating(
 ) -> Tuple[List[DomainEnum], Dict[DomainEnum, str]]:
     """Decide which domains to activate and which to skip.
 
-    Uses domain_activation_vector weights and twin head availability
-    to gate which heads should fire.
+    Uses domain_activation_vector weights, twin head availability,
+    and head_reliability vs min_reliability_threshold to gate which
+    heads should fire.
     """
     active_domains: List[DomainEnum] = []
     skipped: Dict[DomainEnum, str] = {}
-    twin_domains = {h.domain for h in twin.domain_heads}
+    head_map = {h.domain: h for h in twin.domain_heads}
+    threshold = twin.scope_declaration.min_reliability_threshold
 
     for domain, weight in frame.domain_activation_vector.items():
         if weight < 0.1:
             skipped[domain] = f"activation weight {weight:.2f} < 0.10"
-        elif domain not in twin_domains:
+        elif domain not in head_map:
             skipped[domain] = f"no head data for {domain.value}"
+        elif head_map[domain].head_reliability < threshold:
+            rel = head_map[domain].head_reliability
+            skipped[domain] = f"reliability {rel:.2f} < {threshold:.2f}"
         else:
             active_domains.append(domain)
 

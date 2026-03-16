@@ -40,13 +40,26 @@ def _make_frame(
     )
 
 
-def _make_twin(domains=None) -> MagicMock:
-    """Create a minimal mock TwinState."""
+def _make_twin(domains=None, reliabilities=None) -> MagicMock:
+    """Create a minimal mock TwinState.
+
+    Args:
+        domains: list of DomainEnum values for heads
+        reliabilities: dict of DomainEnum -> reliability float (default 0.8 for all)
+    """
     twin = MagicMock()
     if domains is None:
         domains = [DomainEnum.WORK]
-    twin.domain_heads = [MagicMock(domain=d) for d in domains]
+    if reliabilities is None:
+        reliabilities = {}
+    heads = []
+    for d in domains:
+        h = MagicMock(domain=d)
+        h.head_reliability = reliabilities.get(d, 0.8)
+        heads.append(h)
+    twin.domain_heads = heads
     twin.user_id = "user-test"
+    twin.scope_declaration.min_reliability_threshold = 0.5
     return twin
 
 
@@ -142,6 +155,19 @@ class TestDomainGating:
         assert DomainEnum.WORK in plan.domains_to_activate
         assert DomainEnum.MONEY not in plan.domains_to_activate
         assert "no head data" in plan.skipped_domains[DomainEnum.MONEY]
+
+    def test_gating_skips_low_reliability_domains(self):
+        """Domains with head_reliability below threshold are skipped."""
+        frame = _make_frame(domains={DomainEnum.WORK: 0.9, DomainEnum.MONEY: 0.6})
+        twin = _make_twin(
+            domains=[DomainEnum.WORK, DomainEnum.MONEY],
+            reliabilities={DomainEnum.WORK: 0.8, DomainEnum.MONEY: 0.30},
+        )
+        # threshold is 0.5 by default in _make_twin
+        plan, _ = plan_memory_access(frame, twin, evidence_store=None)
+        assert DomainEnum.WORK in plan.domains_to_activate
+        assert DomainEnum.MONEY not in plan.domains_to_activate
+        assert "reliability 0.30 < 0.50" in plan.skipped_domains[DomainEnum.MONEY]
 
 
 class TestPlannerExecution:
