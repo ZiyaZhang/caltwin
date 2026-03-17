@@ -236,6 +236,7 @@ ranking_divergence_pairs: List[str] = Field(
 - Unpack tuple from `_detect_utility_conflict`
 - Pass `axis_conflicts` to `utility_conflict_axes` on ConflictReport
 - Pass `ranking_divergences` to `ranking_divergence_pairs` on ConflictReport
+- Remove or merge the existing `_detect_ranking_disagreement()` function — its logic is now subsumed by the new `ranking_divergences` return from `_detect_utility_conflict`. Keeping both would produce contradictory classifications.
 
 ## 5. Chunk 3: Policy Engine & Retrieval
 
@@ -273,6 +274,8 @@ def _deterministic_scope_guard(
     return None  # No deterministic match; proceed to LLM
 ```
 
+**Known limitation:** Naive substring matching can false-positive (e.g., "medical-grade monitor" matches "medical"). Acceptable for v0.1 since false-positive (wrongly refusing) is safer than false-negative (wrongly advising on medical/legal). Phase 5c S1/S2 router will add embedding-based matching to reduce false positives.
+
 **Integration into `interpret_situation()`:**
 
 Insert before Stage 2 (LLM interpretation):
@@ -306,7 +309,12 @@ return {DomainEnum.WORK: 1.0}, ScopeStatus.OUT_OF_SCOPE, 0.1
 return {}, ScopeStatus.OUT_OF_SCOPE, 0.0
 ```
 
-Downstream `decision_synthesizer.py:32-38` already handles `scope_status == out_of_scope` with a REFUSED response. The empty activation dict will cause `head_activator` to produce no assessments, which synthesizer handles gracefully.
+**Pydantic constraint change required:** `SituationFrame.domain_activation_vector` has `min_length=1` (situation.py:40-43). Relax to `min_length=0` to allow empty activation for OUT_OF_SCOPE frames. Audit downstream consumers:
+- `head_activator.py`: must handle empty activation (skip head activation, return empty assessments)
+- `memory_access_planner.py`: must handle empty activation (return empty plan)
+- `decision_synthesizer.py:32-38`: already handles `scope_status == out_of_scope` with REFUSED response
+
+Downstream synthesizer handles the REFUSED path before reaching head assessments, so empty activation is safe.
 
 ### 5.3 JsonFileEvidenceStore.query() Minimum Viable
 
@@ -321,11 +329,11 @@ def query(self, recall_query: RecallQuery, limit: int = 10) -> List[EvidenceFrag
     """Filter and rank evidence fragments by domain, type, and keyword relevance."""
     fragments = self._load_all_fragments()
 
-    # Filter by domain
+    # Filter by domain (EvidenceFragment uses domain_hint, not domain)
     if recall_query.target_domain:
-        fragments = [f for f in fragments if f.domain == recall_query.target_domain]
+        fragments = [f for f in fragments if f.domain_hint == recall_query.target_domain]
     elif recall_query.domain_filter:
-        fragments = [f for f in fragments if f.domain in recall_query.domain_filter]
+        fragments = [f for f in fragments if f.domain_hint in recall_query.domain_filter]
 
     # Filter by evidence type
     if recall_query.target_evidence_type:
@@ -344,8 +352,8 @@ def query(self, recall_query: RecallQuery, limit: int = 10) -> List[EvidenceFrag
         # Drop zero-relevance fragments
         fragments = [f for f in fragments if relevance_score(f) > 0] or fragments
     else:
-        # Default: sort by recency (created_at descending)
-        fragments.sort(key=lambda f: f.created_at, reverse=True)
+        # Default: sort by recency (EvidenceFragment uses occurred_at, not created_at)
+        fragments.sort(key=lambda f: f.occurred_at, reverse=True)
 
     return fragments[:limit]
 ```
@@ -359,7 +367,7 @@ No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_do
 **Fix:**
 - Planner extracts filter conditions from `SituationFrame`:
   - `target_domain`: highest-weight domain from `frame.domain_activation_vector`
-  - `topic_keywords`: extracted from the query string (simple word tokenization, stop-word removal)
+  - `topic_keywords`: extracted from the query string (whitespace split for English; for Chinese queries, use character n-grams or jieba if available, fallback to full query as single keyword)
   - `domain_filter`: all activated domains (activation > threshold)
 - This makes the planner produce a meaningful query even without LLM assistance.
 - The `TODO` comment is updated to reference Phase 5b.
@@ -373,11 +381,11 @@ No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_do
   ```python
   evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
   for fragment in fragments:
-      evidence_store.save_fragment(fragment)
+      evidence_store.store_fragment(fragment)  # port method is store_fragment(), not save_fragment()
   print(f"Persisted {len(fragments)} evidence fragments to store.")
   ```
 - `cmd_compile()` similarly persists the fragments it processes.
-- `JsonFileEvidenceStore` needs `save_fragment()` if not already present (check existing interface).
+- `JsonFileEvidenceStore` already has `store_fragment()` (port interface at `evidence_store.py:12`).
 - Evidence fragments are stored as individual JSON files under `.../evidence/fragments/{fragment_id}.json`.
 
 ## 6. Test Strategy
