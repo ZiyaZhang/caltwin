@@ -4,7 +4,36 @@
 **Status:** Approved (brainstorming complete)
 **Predecessor:** Phase 4 (Launch-Ready Release)
 **Baseline:** 332 tests, CF=0.758, 5 MCP tools, v0.1.0 alpha
-**Target:** Fix trust boundary violations, persistence bugs, and reasoning correctness issues; wire evidence retrieval to minimum viable; ship a foundation that #5b (looped runtime) and #5c (S1/S2 router) can build on.
+**Target:** Fix trust boundary violations, persistence bugs, and reasoning correctness issues; wire evidence retrieval to minimum viable; ship a foundation that #5b and #5c can build on.
+
+## North Star
+
+> Build a calibrated judgment twin that learns from evidence and feedback to increasingly judge like you, while knowing when it should not judge on your behalf at all.
+>
+> Memory is input. Calibration is the flywheel. Reliable judgment with clear boundaries is the product.
+
+## Invariants (must never be violated by any phase)
+
+1. **Never impersonate a missing twin.** No silent fallback to demo data in production paths.
+2. **Prefer abstention over unsafe overreach.** False refusal is always safer than false confidence.
+3. **Every decision must be traceable** to evidence, routing signals, and reliability scores.
+4. **Online learning may recalibrate weights, but must not silently mutate ontology or control topology.**
+
+## Roadmap Context
+
+This spec is Phase 5a of a three-part release sequence:
+
+| Phase | Name | Focus | Quantifiable Gate |
+|-------|------|-------|-------------------|
+| **5a** | **Release Hardening** (this spec) | Trust boundary, persistence, evidence wiring | Trust boundary bugs = 0, trace completeness = 100% |
+| 5b | Structured Deliberation & Abstention Router | A-lite (S1/S2 routing) + C-lite (multi-signal abstention) | High-stakes CF improves, abstention correctness ≥ 0.9, p95 latency bounded |
+| 5c | Temporal Calibration & Shadow Ontology | B-lite (time decay, drift detection, offline domain suggestion) | Drift detection has stable replay results, per-domain fidelity not degraded |
+
+**Priority order:** 5a → 5b → 5c. Each phase has its own spec → plan → implementation cycle.
+
+**Control plane vs. research plane separation:**
+- **Control plane** (scope gate, router, planner, arbiter, synthesizer): changes must pass fidelity regression tests.
+- **Research plane** (drift detection, ontology suggestion, embedding experiments): may not directly modify runtime control flow without promotion criteria.
 
 ## 1. Goals
 
@@ -56,12 +85,13 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
 - `_get_twin(config, demo=False)`:
   - If `demo=True`: load from `importlib.resources` fixture, print `[DEMO MODE] Using sample twin. No data will be persisted.`
   - If `demo=False` and no twin in store: raise `TwinNotFoundError` (current behavior after removing fixture fallback).
-- **Demo mode behavior:**
+- **Demo mode behavior — every command explicitly defined:**
   - `cmd_run()`: skip trace persistence entirely (no `trace_store.save_trace()`), print `[DEMO MODE]` banner.
   - `cmd_reflect()`: skip outcome persistence, print `[DEMO MODE]` banner.
   - `cmd_evaluate()`: skip evaluation persistence and case used_for_calibration writeback.
-  - `cmd_compile()`: **skip `store.save_state(updated)`** — demo mode must not write sample-twin-derived state to real store. Print `[DEMO MODE] Compilation results not persisted.`
-  - Other commands (`status`, `dashboard`): read-only, no persistence needed anyway.
+  - `cmd_compile()`: **skip `store.save_state(updated)` AND skip `evidence_store.store_fragment()`** — demo mode must not write any sample-twin-derived data to real store. Print `[DEMO MODE] Compilation results not persisted.`
+  - `cmd_dashboard()`: **read sample twin's bundled evaluation data (if any), NOT real store.** In practice, demo mode dashboard will show "No evaluation data found" since sample twin has no evaluations in package resources. This is correct — dashboard requires `twin-runtime evaluate` to have been run first.
+  - `cmd_status()`: read-only display of sample twin state, no persistence.
 
 **Tests to update:**
 - `tests/test_cli.py:test_status_with_fixture` → update to use `--demo` flag or mock.
@@ -397,8 +427,9 @@ def query(self, recall_query: RecallQuery, limit: int = 10) -> List[EvidenceFrag
             return sum(1 for kw in recall_query.topic_keywords if kw.lower() in text_lower)
 
         fragments.sort(key=relevance_score, reverse=True)
-        # Drop zero-relevance fragments
-        fragments = [f for f in fragments if relevance_score(f) > 0] or fragments
+        # Drop zero-relevance fragments — return empty if nothing matches.
+        # For a judgment twin, "no relevant evidence" is more honest than "all vaguely related evidence".
+        fragments = [f for f in fragments if relevance_score(f) > 0]
     else:
         # Default: sort by recency (EvidenceFragment uses occurred_at, not created_at)
         fragments.sort(key=lambda f: f.occurred_at, reverse=True)
@@ -431,7 +462,7 @@ plan, evidence = plan_memory_access(frame, twin, evidence_store, query=query)
 
 **Step 3: Planner extracts filter conditions**
 - `target_domain`: highest-weight domain from `frame.domain_activation_vector` (empty-safe: skip if no activation)
-- `topic_keywords`: extracted from `query` parameter (whitespace split for English; for Chinese queries, use character n-grams or jieba if available, fallback to full query as single keyword)
+- `topic_keywords`: extracted from `query` parameter. **Fixed no-dependency strategy:** whitespace split for all languages; for Chinese text (detected by Unicode range check), additionally generate 2-char bigrams as keywords. No external tokenizer dependency — jieba deferred to Phase 5c. If tokenization yields zero tokens, use full query as single keyword.
 - `domain_filter`: all activated domains with weight > 0.1
 
 **Step 4:** The `TODO: LLM fallback when ambiguity > 0.7` comment is updated to reference Phase 5b.
@@ -486,3 +517,27 @@ Each chunk must maintain the existing 332-test baseline plus new tests:
 - Looped / cyclic pipeline execution
 - HTTP/SSE MCP transport
 - Active learning or concept drift modeling
+- Free-text inner monologue in decision path
+- Embedding distance as sole REFUSE trigger
+
+## 8. What 5a Unlocks
+
+**5a does not increase intelligence or judgment depth.** Its value is making 5b/5c safe to build on.
+
+Specifically, after 5a:
+
+- **5b can add deliberation loops** because traces now contain query + frame snapshots for loop-back context, and the evidence pipeline is wired end-to-end.
+- **5b can add an abstention router** because the scope gate now has a deterministic guard layer with structured results, and conflict types are properly separated.
+- **5c can add time decay** because calibration case persistence is now correct (used_for_calibration actually persists), and trace store listing matches save structure.
+- **5c can add drift detection** because evidence is now persisted during scan/compile, giving the system temporal data to analyze.
+
+Without 5a, building 5b/5c on the current codebase would mean adding advanced reasoning on top of broken persistence, silent demo impersonation, and disconnected evidence retrieval — a house of cards.
+
+## 9. Failure Modes to Monitor
+
+| Failure Mode | Detection | Mitigation |
+|-------------|-----------|------------|
+| False-positive scope refusal | Legitimate in-scope queries hit alias keywords | Log matched_terms in trace; review alias map with calibration data |
+| Demo mode data leakage | Sample twin state/traces/evidence written to real store | Integration test: demo commands leave store unchanged |
+| Evidence wiring produces empty results | Planner sends queries, store returns nothing | Expected until scan/compile populates store; log retrieval stats |
+| Pydantic constraint relaxation cascade | Empty activation/assessments cause downstream crashes | Audit all consumers; add empty-safe guards with tests |
