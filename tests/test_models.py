@@ -159,22 +159,23 @@ class TestSituationFrame:
         )
         assert frame.domain_activation_vector[DomainEnum.WORK] == 0.8
 
-    def test_empty_activation_vector_rejected(self):
-        with pytest.raises(ValidationError):
-            SituationFrame(
-                frame_id="sf-bad",
-                domain_activation_vector={},
-                situation_feature_vector=SituationFeatureVector(
-                    reversibility=OrdinalTriLevel.LOW,
-                    stakes=OrdinalTriLevel.HIGH,
-                    uncertainty_type=UncertaintyType.VALUE_CONFLICT,
-                    controllability=OrdinalTriLevel.LOW,
-                    option_structure=OptionStructure.GENERATE_NEW,
-                ),
-                ambiguity_score=0.9,
-                scope_status=ScopeStatus.BORDERLINE,
-                routing_confidence=0.3,
-            )
+    def test_empty_activation_vector_allowed(self):
+        """Phase 5a: empty activation vector is now valid (scope-guard may refuse)."""
+        frame = SituationFrame(
+            frame_id="sf-empty",
+            domain_activation_vector={},
+            situation_feature_vector=SituationFeatureVector(
+                reversibility=OrdinalTriLevel.LOW,
+                stakes=OrdinalTriLevel.HIGH,
+                uncertainty_type=UncertaintyType.VALUE_CONFLICT,
+                controllability=OrdinalTriLevel.LOW,
+                option_structure=OptionStructure.GENERATE_NEW,
+            ),
+            ambiguity_score=0.9,
+            scope_status=ScopeStatus.BORDERLINE,
+            routing_confidence=0.3,
+        )
+        assert frame.domain_activation_vector == {}
 
 
 class TestRuntimeModels:

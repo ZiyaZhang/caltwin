@@ -34,6 +34,10 @@ class ConflictReport(BaseModel):
     activated_heads: List[DomainEnum]
     conflict_types: List[ConflictType] = Field(min_length=1)
     utility_conflict_axes: List[str] = Field(default_factory=list)
+    ranking_divergence_pairs: List[str] = Field(
+        default_factory=list,
+        description="Cross-domain ranking inversions",
+    )
     belief_conflict_axes: List[str] = Field(default_factory=list)
     evidence_conflict_sources: List[str] = Field(default_factory=list)
     resolvable_by_system: bool
@@ -47,7 +51,7 @@ class RuntimeDecisionTrace(BaseModel):
     twin_state_version: str
     situation_frame_id: str = Field(min_length=1)
     activated_domains: List[DomainEnum]
-    head_assessments: List[HeadAssessment] = Field(min_length=1)
+    head_assessments: List[HeadAssessment] = Field(default_factory=list)
     conflict_report_id: Optional[str] = None
     final_decision: str
     decision_mode: DecisionMode
@@ -71,6 +75,19 @@ class RuntimeDecisionTrace(BaseModel):
         default=None, description="MicroCalibrationUpdate if micro_calibrate=True"
     )
     created_at: datetime
+    query: str = Field(default="", description="Original decision query")
+    situation_frame: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="JSON-safe snapshot of SituationFrame at decision time",
+    )
+    scope_guard_result: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Deterministic scope guard output",
+    )
+    refusal_reason_code: Optional[str] = Field(
+        default=None,
+        description="OUT_OF_SCOPE | NON_MODELED | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE",
+    )
 
 
 class RuntimeEvent(BaseModel):
