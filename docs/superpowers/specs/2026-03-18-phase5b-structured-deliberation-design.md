@@ -118,9 +118,9 @@ class DeliberationRoundSummary(BaseModel):
     round_index: int
     new_unique_evidence_count: int
     conflict_types: List[str]
-    top_choice: str
+    top_choice: Optional[str] = None  # None during refusal rounds
     avg_head_confidence: float
-    top_choice_changed: bool = False
+    top_choice_changed: bool = False  # None→None is NOT a change
 ```
 
 ### 3.4 New Trace Fields
@@ -152,7 +152,7 @@ tests/fixtures/golden_traces/
 ├── s2_deliberate_high_stakes.json
 ├── refuse_policy_restricted.json
 ├── refuse_non_modeled.json
-├── refuse_low_reliability.json
+├── refuse_low_reliability.json     # Post-execution refusal: borderline scope → S1 runs → planner skips domains due to reliability → refusal_reason_code=LOW_RELIABILITY. NOT a route-time trigger.
 ├── refuse_insufficient_evidence.json
 └── s2_budget_exhausted.json
 ```
@@ -235,9 +235,10 @@ The `ScriptedLLM` dispatches based on call context (interpret vs head_assess vs 
 ### 4.4 Assertion Rules
 
 - Exact match: `decision_mode`, `refusal_reason_code`, `route_path`, `boundary_policy`, `terminated_by`
-- Nested path: `scope_status` asserted via `trace.situation_frame["scope_status"]` (not a top-level trace field)
 - Exact match: `deliberation_rounds`
+- Nested path: `scope_status` asserted via `trace.situation_frame["scope_status"]`
 - Contains check: `activated_domains_contains`
+- **Top choice (when present):** If `expected_top_choice` is set in the golden case, extract `top_choice` from `trace.final_decision` (parse "Recommended: X" prefix) and assert match. If `expected_top_choice` is null, skip this assertion.
 - Not asserted: `trace_id`, `created_at`, `output_text`, `memory_access_plan`, `shadow_scores`
 
 ## 5. Component 2: Runtime Orchestrator + Route Decision
@@ -264,13 +265,15 @@ def run(
     evidence_store: Optional[EvidenceStore] = None,
     micro_calibrate: bool = False,
     max_deliberation_rounds: int = 2,
+    force_path: Optional[ExecutionPath] = None,  # For golden trace testing: override routing
 ) -> RuntimeDecisionTrace:
 ```
 
 Flow:
 1. `frame, guard_result = interpret_situation(query, twin, llm=llm)`
 2. `route = decide_route(frame, guard_result, twin)`
-3. If `route.boundary_policy == FORCE_REFUSE`: build refusal trace directly, return
+3. If `force_path is not None`: override `route.execution_path = force_path` (boundary_policy preserved). This enables golden trace baseline comparison: same case forced through S1 vs natural S2 routing.
+4. If `route.boundary_policy == FORCE_REFUSE`: build refusal trace directly, return
 4. If `route.execution_path == S1_DIRECT`: call `execute_from_frame_once(frame, query, option_set, twin, ...)`
 5. If `route.execution_path == S2_DELIBERATE`: call `deliberation_loop(frame, query, option_set, twin, ..., max_iterations=max_deliberation_rounds)`
 6. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED` **only if trace.decision_mode is not already REFUSED**. Hard rule: FORCE_DEGRADE only downgrades answerable results (DIRECT → DEGRADED, CLARIFIED → DEGRADED). It must never override a REFUSED decision — that would weaken abstention.
