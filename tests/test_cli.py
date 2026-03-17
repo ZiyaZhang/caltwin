@@ -83,8 +83,17 @@ class TestCLI:
         assert "model" in captured.out
 
     def test_status_with_fixture(self, tmp_config, capsys):
-        fixture_path = str(Path(__file__).parent / "fixtures" / "sample_twin_state.json")
-        _save_config({"user_id": "user-ziya", "fixture_path": fixture_path})
+        """Status works when twin is loaded into the store."""
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+        import twin_runtime.cli as cli_mod
+
+        fixture_path = Path(__file__).parent / "fixtures" / "sample_twin_state.json"
+        twin = TwinState(**json.loads(fixture_path.read_text()))
+        store = TwinStore(str(cli_mod._STORE_DIR))
+        store.save_state(twin)
+
+        _save_config({"user_id": "user-ziya"})
         with patch("sys.argv", ["twin-runtime", "status"]):
             main()
         captured = capsys.readouterr()
