@@ -356,8 +356,10 @@ def cmd_config(args):
 
 def cmd_dashboard(args):
     """Generate HTML fidelity dashboard."""
+    config = _load_config()
+    user_id = config.get("user_id", "default")
     from twin_runtime.application.dashboard.cli import dashboard_command
-    dashboard_command(output=args.output, open_browser=args.open)
+    dashboard_command(store_dir=str(_STORE_DIR), user_id=user_id, output=args.output, open_browser=args.open)
 
 
 def cmd_reflect(args):
