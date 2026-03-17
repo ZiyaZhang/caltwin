@@ -36,7 +36,7 @@ def run(
     frame, guard_result = interpret_situation(query, twin, llm=llm)
 
     # 2. Memory Access Planner
-    plan, evidence = plan_memory_access(frame, twin, evidence_store)
+    plan, evidence = plan_memory_access(frame, twin, evidence_store, query=query)
 
     # 3. Head Activation — pass enriched context with retrieved evidence
     context = EnrichedActivationContext(
