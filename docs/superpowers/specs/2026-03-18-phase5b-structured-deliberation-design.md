@@ -274,14 +274,14 @@ def run(
 Flow:
 1. `frame, guard_result = interpret_situation(query, twin, llm=llm)`
 2. `route = decide_route(frame, guard_result, twin)`
-3. If `force_path is not None`: override `route.execution_path = force_path` (boundary_policy preserved). This enables golden trace baseline comparison: same case forced through S1 vs natural S2 routing.
+3. If `force_path is not None`: override `route.execution_path = force_path` (boundary_policy preserved). This enables golden trace baseline comparison: same case forced through S1 vs natural S2 routing. **Constraint: golden baseline cases using force_path must not be FORCE_REFUSE cases** — forcing a path on a refused case is nonsensical.
 4. If `route.boundary_policy == FORCE_REFUSE`: build refusal trace directly, return
-4. If `route.execution_path == S1_DIRECT`: call `execute_from_frame_once(frame, query, option_set, twin, ...)`
-5. If `route.execution_path == S2_DELIBERATE`: call `deliberation_loop(frame, query, option_set, twin, ..., max_iterations=max_deliberation_rounds)`
-6. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED` **only if trace.decision_mode is not already REFUSED**. Hard rule: FORCE_DEGRADE only downgrades answerable results (DIRECT → DEGRADED, CLARIFIED → DEGRADED). It must never override a REFUSED decision — that would weaken abstention.
-7. Populate routing metadata on trace: `route_path`, `route_reason_codes`, `boundary_policy`, `shadow_scores`
-8. Assign `refusal_reason_code` with **precedence rule: if the deliberation loop or single-pass executor already set `refusal_reason_code` (e.g., INSUFFICIENT_EVIDENCE), do NOT overwrite it.** Only assign if currently None. This prevents the generic 5a assignment logic from clobbering specific codes set by the loop's post-abstention logic.
-9. Return trace
+5. If `route.execution_path == S1_DIRECT`: call `execute_from_frame_once(frame, query, option_set, twin, ...)`
+6. If `route.execution_path == S2_DELIBERATE`: call `deliberation_loop(frame, query, option_set, twin, ..., max_iterations=max_deliberation_rounds)`
+7. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED` **only if trace.decision_mode is not already REFUSED**. Hard rule: FORCE_DEGRADE only downgrades answerable results (DIRECT → DEGRADED, CLARIFIED → DEGRADED). It must never override a REFUSED decision — that would weaken abstention.
+8. Populate routing metadata on trace: `route_path`, `route_reason_codes`, `boundary_policy`, `shadow_scores`
+9. Assign `refusal_reason_code` with **precedence rule: if the deliberation loop or single-pass executor already set `refusal_reason_code` (e.g., INSUFFICIENT_EVIDENCE), do NOT overwrite it.** Only assign if currently None.
+10. Return trace
 
 ### 5.3 Single-Pass Executor (avoiding circular dependency)
 
