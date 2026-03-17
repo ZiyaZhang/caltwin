@@ -38,7 +38,7 @@ Repository = "https://github.com/ziya/twin-runtime"
 where = ["src"]
 
 [tool.setuptools.package-data]
-twin_runtime = ["resources/skills/*/SKILL.md"]
+twin_runtime = ["resources/skills/*/SKILL.md", "resources/fixtures/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

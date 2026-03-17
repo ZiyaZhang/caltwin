@@ -78,13 +78,14 @@ class TestHandleStatus:
         assert result["user_id"] == twin.user_id
         assert len(result["domains"]) == len(twin.domain_heads)
 
-    def test_no_twin_returns_error(self, tmp_path, monkeypatch):
+    def test_no_twin_falls_back_to_fixture(self, tmp_path, monkeypatch):
         env = {"TWIN_STORE_DIR": str(tmp_path / "empty"), "TWIN_USER_ID": "nobody"}
         # Change CWD so the dev-mode fixture fallback doesn't kick in
         monkeypatch.chdir(tmp_path)
         with patch.dict("os.environ", env):
             result = json.loads(_run(_handle_status({})))
-        assert "error" in result
+        # Package resource fixture now provides a valid fallback
+        assert "core_confidence" in result
 
 
 # ---------------------------------------------------------------------------
