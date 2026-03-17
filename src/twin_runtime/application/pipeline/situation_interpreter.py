@@ -16,6 +16,7 @@ from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel, S
 from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState, ScopeDeclaration
 from twin_runtime.domain.ports.llm_port import LLMPort
+from twin_runtime.application.pipeline.scope_guard import ScopeGuardResult, deterministic_scope_guard
 
 
 # --- Stage 1: Rule-based hard signal extraction ---
@@ -130,7 +131,7 @@ def _apply_routing_policy(
         # Check if ANY domain was activated (just not valid ones)
         if activation:
             return activation, ScopeStatus.BORDERLINE, 0.3
-        return {DomainEnum.WORK: 1.0}, ScopeStatus.OUT_OF_SCOPE, 0.1
+        return {}, ScopeStatus.OUT_OF_SCOPE, 0.0
 
     # Normalize
     total = sum(filtered.values())
@@ -155,9 +156,29 @@ def _apply_routing_policy(
 # --- Public API ---
 
 
-def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[SituationFrame, None]:
+def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[SituationFrame, ScopeGuardResult]:
     """Run the three-stage Situation Interpreter pipeline."""
     all_domains = [d.value for d in DomainEnum]
+
+    # Stage 0: Deterministic scope guard (pre-LLM)
+    guard_result = deterministic_scope_guard(query, twin.scope_declaration)
+
+    if guard_result.restricted_hit:
+        # Short-circuit: don't even call LLM
+        feature_vector = SituationFeatureVector(
+            reversibility=OrdinalTriLevel.MEDIUM, stakes=OrdinalTriLevel.HIGH,
+            uncertainty_type=UncertaintyType.MIXED, controllability=OrdinalTriLevel.LOW,
+            option_structure=OptionStructure.CHOOSE_EXISTING,
+        )
+        frame = SituationFrame(
+            frame_id=str(uuid.uuid4()),
+            domain_activation_vector={},
+            situation_feature_vector=feature_vector,
+            ambiguity_score=1.0,
+            scope_status=ScopeStatus.OUT_OF_SCOPE,
+            routing_confidence=0.0,
+        )
+        return frame, guard_result
 
     # Stage 1: keyword hints
     keyword_hints = _keyword_scores_from_twin(query, twin.domain_heads)
@@ -186,6 +207,12 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[S
         raw_activation, ambiguity, twin.scope_declaration, twin
     )
 
+    # Apply non_modeled guard result
+    if guard_result.non_modeled_hit and not filtered_activation:
+        scope_status = ScopeStatus.OUT_OF_SCOPE
+    elif guard_result.non_modeled_hit:
+        scope_status = ScopeStatus.BORDERLINE
+
     # Build feature vector from LLM output
     feature_vector = SituationFeatureVector(
         reversibility=OrdinalTriLevel(llm_result.get("reversibility", "medium")),
@@ -204,4 +231,4 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[S
         scope_status=scope_status,
         routing_confidence=routing_confidence,
     )
-    return frame, None  # ScopeGuardResult added in Chunk 3
+    return frame, guard_result

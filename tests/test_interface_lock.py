@@ -113,5 +113,6 @@ class TestInterpretSituationReturnType:
         assert isinstance(result, tuple), "Must return (frame, guard_result) tuple"
         frame, guard_result = result
         assert hasattr(frame, "scope_status")
-        # guard_result is None until Chunk 3 adds scope guard
-        assert guard_result is None
+        # Chunk 3: guard_result is now a ScopeGuardResult
+        from twin_runtime.application.pipeline.scope_guard import ScopeGuardResult
+        assert isinstance(guard_result, ScopeGuardResult)
