@@ -44,7 +44,7 @@
     └── SKILL.md
 ```
 
-**Single source of truth:** `src/twin_runtime/resources/skills/`. The repo-root `.claude/skills/` is generated/symlinked from package resources — not maintained as a separate copy. A build script or Makefile target syncs them before release.
+**Single source of truth:** `src/twin_runtime/resources/skills/`. The repo-root `.claude/skills/` is committed as symlinks pointing to `src/twin_runtime/resources/skills/*/`. This means `git clone` gives immediate skill availability without running a sync script, while the package resources remain the authoritative copy for PyPI distribution.
 
 ### Frontmatter Convention
 
@@ -458,7 +458,7 @@ Skills:
 - [ ] install-skills packaging test (wheel + importlib.resources)
 
 MCP Server:
-- [ ] Transport protocol + StdioTransport
+- [ ] MCP SDK stdio server wired (fallback: minimal Transport only if SDK unavailable)
 - [ ] TwinMCPServer with initialize/tools_list/tools_call + graceful shutdown
 - [ ] twin_decide handler (launch gate)
 - [ ] twin_reflect handler (launch gate)
