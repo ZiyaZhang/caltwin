@@ -227,7 +227,9 @@ For S2 cases, `llm_script` includes multiple rounds:
 1. Load twin from `twin_fixture`
 2. Load evidence from `evidence_fixture` (if any) into a temp evidence store
 3. Build a `ScriptedLLM` mock that returns responses from `llm_script` in sequence
-4. Call `orchestrator.run(query, options, twin, evidence_store, llm=scripted_llm)`
+4. Call `orchestrator.run(query, options, twin, evidence_store, llm=scripted_llm, force_path=case.get("force_path"))`
+   - If `force_path` is set (e.g., `"s1_direct"`), convert to `ExecutionPath` enum and pass through
+   - If `force_path` is null/absent, omit (natural routing)
 5. Assert `expected` fields against the returned trace
 
 The `ScriptedLLM` dispatches based on call context (interpret vs head_assess vs synthesize) using the system prompt or schema_name to distinguish.
@@ -294,7 +296,7 @@ application/pipeline/runner.py          # imports single_pass (backward compat)
 ```
 
 - `application/pipeline/single_pass.py` — `execute_from_frame_once(frame, query, option_set, twin, *, llm, evidence_store, guard_result)` — does plan → activate → arbitrate → synthesize, returns trace.
-- `runner.py:run()` preserved as backward-compatible entry: calls interpret_situation, then `single_pass.execute_from_frame_once()`. Does NOT import orchestrator.
+- `runner.py:run()` preserved as backward-compatible entry: **delegates to `orchestrator.run()`**. This ensures all callers (including tests, tools, external scripts) get router/S2 semantics automatically. `single_pass` is internal — only used by orchestrator and low-level tests.
 - Orchestrator calls `single_pass.execute_from_frame_once()` directly for S1, and uses the same building blocks (plan, activate, arbitrate) individually for S2 loop.
 
 Key: `execute_from_frame_once` does NOT call `interpret_situation`. The orchestrator owns interpretation. No circular imports.
@@ -337,9 +339,16 @@ def decide_route(
    → S2_DELIBERATE + NORMAL + ["multi_domain"]
    NOTE: low_reliability is NOT a route-time signal. interpret_situation already filters
    out domains below min_reliability_threshold, so post-interpret activation only contains
-   valid domains. LOW_RELIABILITY as a refusal_reason_code is a post-execution outcome
-   (assigned by runner/orchestrator when planner skipped_domains contains reliability failures),
-   not a routing trigger.
+   valid domains. LOW_RELIABILITY as a refusal_reason_code is a post-execution outcome,
+   not a routing trigger. Hard assignment rule (in orchestrator, after execution):
+   ```
+   if trace.decision_mode == REFUSED
+       and len(trace.head_assessments) == 0
+       and trace.skipped_domains
+       and all("reliability" in reason.lower() for reason in trace.skipped_domains.values())
+       and trace.refusal_reason_code is None:
+           trace.refusal_reason_code = "LOW_RELIABILITY"
+   ```
 
 9. Default
    → S1_DIRECT + NORMAL + []
@@ -449,13 +458,21 @@ for round_idx in range(1, max_iterations + 1):
     conflict = arbitrate(assessments)
     structured = merge_structured_decision(assessments, conflict, frame, option_set=option_set)
 
+    # None→None is NOT a change; only compare when both are non-None
+    prev_top = round_summaries[-1].top_choice if round_summaries else None
+    choice_changed = (
+        structured.top_choice is not None
+        and prev_top is not None
+        and structured.top_choice != prev_top
+    )
+
     round_summaries.append(DeliberationRoundSummary(
         round_index=round_idx,
         new_unique_evidence_count=len(unique_new),
         conflict_types=[c.value for c in conflict.conflict_types] if conflict else [],
         top_choice=structured.top_choice,
         avg_head_confidence=structured.avg_confidence,
-        top_choice_changed=(structured.top_choice != round_summaries[-1].top_choice),
+        top_choice_changed=choice_changed,
     ))
 else:
     termination = TerminationReason.MAX_ITERATIONS
