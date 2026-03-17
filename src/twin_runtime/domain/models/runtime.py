@@ -88,6 +88,14 @@ class RuntimeDecisionTrace(BaseModel):
         default=None,
         description="OUT_OF_SCOPE | NON_MODELED | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE",
     )
+    # Routing metadata (Phase 5b)
+    route_path: str = Field(default="s1_direct", description="Execution path: s1_direct | s2_deliberate | no_execution")
+    route_reason_codes: List[str] = Field(default_factory=list)
+    boundary_policy: str = Field(default="normal", description="normal | force_degrade | force_refuse")
+    deliberation_rounds: int = Field(default=0, description="Number of deliberation rounds (S1=0)")
+    terminated_by: Optional[str] = Field(default=None, description="TerminationReason value")
+    deliberation_round_summaries: List[Dict[str, Any]] = Field(default_factory=list)
+    shadow_scores: Optional[Dict[str, float]] = Field(default=None)
 
 
 class RuntimeEvent(BaseModel):
