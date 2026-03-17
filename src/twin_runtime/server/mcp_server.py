@@ -57,6 +57,34 @@ TOOLS = [
             "required": ["choice"],
         },
     },
+    {
+        "name": "twin_calibrate",
+        "description": "Run batch fidelity evaluation on calibration cases",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "with_bias_detection": {
+                    "type": "boolean",
+                    "description": "Include prior bias detection (slower)",
+                    "default": False,
+                },
+            },
+        },
+    },
+    {
+        "name": "twin_history",
+        "description": "List recent decision traces",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max number of traces to return",
+                    "default": 10,
+                },
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -257,10 +285,75 @@ def _save_standalone_outcome(cal_store, choice, reasoning, trace_id, user_id):
     cal_store.save_outcome(outcome)
 
 
+async def _handle_calibrate(args: Dict[str, Any]) -> str:
+    """Run batch fidelity evaluation."""
+    try:
+        from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
+
+        twin_store, _, cal_store, user_id = _get_stores()
+        twin = _load_twin(twin_store, user_id)
+        if twin is None:
+            return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
+
+        cases = cal_store.list_cases(used=False)
+        if not cases:
+            return json.dumps({"message": "No calibration cases found.", "choice_similarity": 0.0})
+
+        evaluation = evaluate_fidelity(cases, twin)
+        cal_store.save_evaluation(evaluation)
+
+        result = {
+            "evaluation_id": evaluation.evaluation_id,
+            "choice_similarity": evaluation.choice_similarity,
+            "reasoning_similarity": evaluation.reasoning_similarity,
+            "domain_reliability": evaluation.domain_reliability,
+            "total_cases": len(cases),
+            "failed_cases": evaluation.failed_case_count,
+        }
+        if evaluation.abstention_accuracy is not None:
+            result["abstention_accuracy"] = evaluation.abstention_accuracy
+        return json.dumps(result, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": "Error running calibrate: %s" % e})
+
+
+async def _handle_history(args: Dict[str, Any]) -> str:
+    """List recent decision traces."""
+    limit = args.get("limit", 10)
+    try:
+        _, trace_store, _, user_id = _get_stores()
+
+        traces = []
+        trace_dir = trace_store.base
+        if trace_dir.exists():
+            files = sorted(trace_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for f in files[:limit]:
+                try:
+                    from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
+                    trace = RuntimeDecisionTrace.model_validate_json(f.read_text())
+                    traces.append({
+                        "trace_id": trace.trace_id,
+                        "decision": trace.final_decision,
+                        "mode": trace.decision_mode.value,
+                        "uncertainty": trace.uncertainty,
+                        "domains": [d.value for d in trace.activated_domains],
+                        "created_at": trace.created_at.isoformat(),
+                    })
+                except Exception:
+                    continue
+
+        return json.dumps({"traces": traces, "count": len(traces)}, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": "Error listing history: %s" % e})
+
+
 _TOOL_HANDLERS = {
     "twin_decide": _handle_decide,
     "twin_status": _handle_status,
     "twin_reflect": _handle_reflect,
+    "twin_calibrate": _handle_calibrate,
+    "twin_history": _handle_history,
 }
 
 

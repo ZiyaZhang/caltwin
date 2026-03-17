@@ -49,11 +49,11 @@ def _run(coro):
 
 class TestToolDefinitions:
     def test_has_three_tools(self):
-        assert len(TOOLS) == 3
+        assert len(TOOLS) == 5
 
     def test_tool_names(self):
         names = {t["name"] for t in TOOLS}
-        assert names == {"twin_decide", "twin_status", "twin_reflect"}
+        assert names == {"twin_decide", "twin_status", "twin_reflect", "twin_calibrate", "twin_history"}
 
     def test_decide_requires_query_and_options(self):
         decide = [t for t in TOOLS if t["name"] == "twin_decide"][0]
@@ -192,7 +192,7 @@ class TestStdioMCPServerProtocol:
         server = _StdioMCPServer()
         resp = _run(server._dispatch({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}))
         tool_names = {t["name"] for t in resp["result"]["tools"]}
-        assert tool_names == {"twin_decide", "twin_status", "twin_reflect"}
+        assert tool_names == {"twin_decide", "twin_status", "twin_reflect", "twin_calibrate", "twin_history"}
 
     def test_unknown_method_returns_error(self):
         server = _StdioMCPServer()
