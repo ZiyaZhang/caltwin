@@ -25,7 +25,7 @@ This spec is Phase 5a of a three-part release sequence:
 
 | Phase | Name | Focus | Quantifiable Gate |
 |-------|------|-------|-------------------|
-| **5a** | **Release Hardening** (this spec) | Trust boundary, persistence, evidence wiring | Trust boundary bugs = 0, trace completeness = 100% |
+| **5a** | **Release Hardening** (this spec) | Trust boundary, persistence, evidence wiring | Trust boundary bugs = 0, trace completeness = 100%, persistence integrity = 100% (save→load round-trip verified), every refusal has a `refusal_reason_code` |
 | 5b | Structured Deliberation & Abstention Router | A-lite (S1/S2 routing) + C-lite (multi-signal abstention) | High-stakes CF improves, abstention correctness ≥ 0.9, p95 latency bounded |
 | 5c | Temporal Calibration & Shadow Ontology | B-lite (time decay, drift detection, offline domain suggestion) | Drift detection has stable replay results, per-domain fidelity not degraded |
 
@@ -81,7 +81,8 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
   _twin_parent.add_argument("--demo", action="store_true",
       help="Use bundled sample twin (no data persisted)")
   ```
-- Attach `_twin_parent` as parent to subcommands that need twin: `run`, `status`, `evaluate`, `dashboard`, `compile`, `reflect`.
+- Attach `_twin_parent` as parent to subcommands that need twin: `run`, `status`, `evaluate`, `reflect`.
+- **Not demo-enabled:** `dashboard` (requires real evaluation data to be meaningful; demo would only show "no data"), `compile` (requires real configured sources; demo with sample twin + no sources is meaningless).
 - `_get_twin(config, demo=False)`:
   - If `demo=True`: load from `importlib.resources` fixture, print `[DEMO MODE] Using sample twin. No data will be persisted.`
   - If `demo=False` and no twin in store: raise `TwinNotFoundError` (current behavior after removing fixture fallback).
@@ -89,9 +90,8 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
   - `cmd_run()`: skip trace persistence entirely (no `trace_store.save_trace()`), print `[DEMO MODE]` banner.
   - `cmd_reflect()`: skip outcome persistence, print `[DEMO MODE]` banner.
   - `cmd_evaluate()`: skip evaluation persistence and case used_for_calibration writeback.
-  - `cmd_compile()`: **skip `store.save_state(updated)` AND skip `evidence_store.store_fragment()`** — demo mode must not write any sample-twin-derived data to real store. Print `[DEMO MODE] Compilation results not persisted.`
-  - `cmd_dashboard()`: **read sample twin's bundled evaluation data (if any), NOT real store.** In practice, demo mode dashboard will show "No evaluation data found" since sample twin has no evaluations in package resources. This is correct — dashboard requires `twin-runtime evaluate` to have been run first.
   - `cmd_status()`: read-only display of sample twin state, no persistence.
+- **Implementation guidance:** Demo mode should be implemented via **null/read-only adapters injected at composition root**, not via scattered `if demo: skip` guards in business logic. Specifically: `NullTraceStore` (all writes are no-ops), `NullCalibrationStore` (no-op writes), `FixtureTwinStore` (reads from package resource). This prevents "forgot to check demo flag" bugs as commands grow.
 
 **Tests to update:**
 - `tests/test_cli.py:test_status_with_fixture` → update to use `--demo` flag or mock.
@@ -142,12 +142,29 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
       default=None,
       description="JSON-safe snapshot of SituationFrame at decision time",
   )
+  scope_guard_result: Optional[Dict[str, Any]] = Field(
+      default=None,
+      description="Deterministic scope guard output: {restricted_hit, non_modeled_hit, matched_terms}",
+  )
+  refusal_reason_code: Optional[str] = Field(
+      default=None,
+      description="Structured refusal reason: NO_TWIN | OUT_OF_SCOPE | NON_MODELED | INSUFFICIENT_EVIDENCE | LOW_RELIABILITY | POLICY_RESTRICTED",
+  )
   ```
 - `runner.py:run()` populates after synthesis (same pattern as `trace.memory_access_plan`):
   ```python
   trace.query = query
   trace.situation_frame = frame.model_dump(mode="json")
+  if hasattr(frame, '_scope_guard_result'):  # set by interpret_situation
+      trace.scope_guard_result = asdict(frame._scope_guard_result) if frame._scope_guard_result else None
   ```
+- The `scope_guard_result` and `refusal_reason_code` enable downstream diagnostics: when a false-positive refusal occurs, the trace shows exactly which alias triggered it, whether it was restricted vs non_modeled, and the final scope decision.
+- `refusal_reason_code` is set by the synthesizer when mode is REFUSED or DEGRADED:
+  - `OUT_OF_SCOPE` → scope gate or empty activation
+  - `NON_MODELED` → non_modeled_capabilities hit
+  - `POLICY_RESTRICTED` → restricted_use_cases hit
+  - `LOW_RELIABILITY` → domain reliability below threshold
+  - `INSUFFICIENT_EVIDENCE` → (future, Phase 5b)
 - Using `mode="json"` ensures `Dict[DomainEnum, float]` keys are serialized as strings, avoiding enum key serialization bugs in `model_dump_json()`.
 
 ### 3.5 event_collector Consumes New Fields
@@ -400,10 +417,10 @@ Downstream synthesizer handles the REFUSED path before reaching head assessments
 
 **Fix:**
 
-Implement `query()` method (matching existing port interface) with keyword-level filtering:
+Implement `query()` method (matching existing port signature `query(self, query: RecallQuery) -> List[EvidenceFragment]`) with keyword-level filtering. `RecallQuery` already has a `limit` field — use it, do not add a separate `limit` parameter:
 
 ```python
-def query(self, recall_query: RecallQuery, limit: int = 10) -> List[EvidenceFragment]:
+def query(self, recall_query: RecallQuery) -> List[EvidenceFragment]:
     """Filter and rank evidence fragments by domain, type, and keyword relevance."""
     fragments = self._load_all_fragments()
 
@@ -434,7 +451,7 @@ def query(self, recall_query: RecallQuery, limit: int = 10) -> List[EvidenceFrag
         # Default: sort by recency (EvidenceFragment uses occurred_at, not created_at)
         fragments.sort(key=lambda f: f.occurred_at, reverse=True)
 
-    return fragments[:limit]
+    return fragments[:recall_query.limit] if hasattr(recall_query, 'limit') else fragments[:10]
 ```
 
 No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_domain`, `target_evidence_type`, `domain_filter`, `evidence_type_filter`.
@@ -537,7 +554,7 @@ Without 5a, building 5b/5c on the current codebase would mean adding advanced re
 
 | Failure Mode | Detection | Mitigation |
 |-------------|-----------|------------|
-| False-positive scope refusal | Legitimate in-scope queries hit alias keywords | Log matched_terms in trace; review alias map with calibration data |
+| False-positive scope refusal | Legitimate in-scope queries hit alias keywords | `trace.scope_guard_result.matched_terms` + `refusal_reason_code` enable exact diagnosis; review alias map with calibration data |
 | Demo mode data leakage | Sample twin state/traces/evidence written to real store | Integration test: demo commands leave store unchanged |
 | Evidence wiring produces empty results | Planner sends queries, store returns nothing | Expected until scan/compile populates store; log retrieval stats |
 | Pydantic constraint relaxation cascade | Empty activation/assessments cause downstream crashes | Audit all consumers; add empty-safe guards with tests |
