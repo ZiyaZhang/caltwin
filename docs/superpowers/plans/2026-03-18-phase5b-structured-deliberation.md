@@ -102,7 +102,7 @@ class StructuredDecision:
     top_choice: Optional[str]
     option_scores: Dict[str, float]
     avg_confidence: float
-    mode: str  # DecisionMode value
+    mode: DecisionMode
     refusal_reason: Optional[str] = None
 ```
 
@@ -175,8 +175,13 @@ def execute_from_frame_once(
     llm: LLMPort,
     evidence_store: Optional[EvidenceStore] = None,
     guard_result: Optional[ScopeGuardResult] = None,
+    micro_calibrate: bool = False,
 ) -> RuntimeDecisionTrace:
-    """Execute a single pass of the pipeline from a pre-computed SituationFrame."""
+    """Execute a single pass of the pipeline from a pre-computed SituationFrame.
+
+    Preserves all existing runner.py semantics: audit fields, micro_calibrate,
+    refusal_reason_code assignment. This is the canonical single-pass executor.
+    """
     # 1. Plan + retrieve evidence
     plan, evidence = plan_memory_access(frame, twin, evidence_store, query=query)
 
@@ -195,7 +200,7 @@ def execute_from_frame_once(
     # 4. Synthesis
     trace = synthesize(query, option_set, frame, assessments, conflict, twin, llm=llm)
 
-    # 5. Populate audit fields
+    # 5. Populate audit fields (same as current runner.py:57-83)
     trace.memory_access_plan = plan.model_dump()
     trace.retrieved_evidence_count = len(evidence)
     trace.skipped_domains = {d.value: reason for d, reason in plan.skipped_domains.items()}
@@ -205,12 +210,32 @@ def execute_from_frame_once(
         from dataclasses import asdict
         trace.scope_guard_result = asdict(guard_result)
 
+    # 6. Refusal reason code (5a logic preserved)
+    from twin_runtime.domain.models.primitives import DecisionMode, ScopeStatus
+    if trace.refusal_reason_code is None:  # Precedence: don't overwrite existing
+        if trace.decision_mode == DecisionMode.REFUSED:
+            if guard_result and getattr(guard_result, 'restricted_hit', False):
+                trace.refusal_reason_code = "POLICY_RESTRICTED"
+            elif guard_result and getattr(guard_result, 'non_modeled_hit', False):
+                trace.refusal_reason_code = "NON_MODELED"
+            elif frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
+                trace.refusal_reason_code = "OUT_OF_SCOPE"
+            else:
+                trace.refusal_reason_code = "LOW_RELIABILITY"
+        elif trace.decision_mode == DecisionMode.DEGRADED:
+            trace.refusal_reason_code = "DEGRADED_SCOPE"
+
+    # 7. Micro-calibration (preserved from runner)
+    if micro_calibrate:
+        from twin_runtime.application.calibration.micro_calibration import recalibrate_confidence
+        trace.pending_calibration_update = recalibrate_confidence(trace, twin)
+
     return trace
 ```
 
-- [ ] **Step 2: Update runner.py to use single_pass**
+- [ ] **Step 2: Do NOT modify runner.py yet**
 
-`runner.py:run()` should now call `interpret_situation` then delegate to `single_pass.execute_from_frame_once()`. Keep the same signature for backward compat. After 5b orchestrator is wired, this will delegate to orchestrator instead.
+`runner.py:run()` stays unchanged at this point. It will be updated once in Task 7 to delegate to orchestrator. No intermediate "runner → single_pass" step — that would create a throwaway migration. `single_pass.py` is only consumed by orchestrator and deliberation loop.
 
 - [ ] **Step 3: Run full suite — no regression**
 
@@ -219,8 +244,8 @@ Run: `python3 -m pytest tests/ -q -m "not requires_llm" --tb=short`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/twin_runtime/application/pipeline/single_pass.py src/twin_runtime/application/pipeline/runner.py
-git commit -m "refactor: extract single-pass executor from runner"
+git add src/twin_runtime/application/pipeline/single_pass.py
+git commit -m "refactor: extract single-pass executor (runner unchanged, consumed by orchestrator)"
 ```
 
 ### Task 3: Extract merge_structured_decision from synthesizer
@@ -228,12 +253,53 @@ git commit -m "refactor: extract single-pass executor from runner"
 **Files:**
 - Modify: `src/twin_runtime/application/pipeline/decision_synthesizer.py`
 
-- [ ] **Step 1: Extract merge logic**
+- [ ] **Step 1: Extract shared scoring helper**
 
-Create `merge_structured_decision()` that computes the structured decision (top_choice, scores, confidence, mode) WITHOUT doing surface realization. The existing `_synthesize_decision()` should call this internally.
+The current `_synthesize_decision()` contains the core scoring logic (weighted option scores, phantom option filtering, mode determination). Instead of calling `_synthesize_decision()` and re-parsing its string output, extract the shared logic into a helper that both functions call:
 
 ```python
 from twin_runtime.application.orchestrator.models import StructuredDecision
+
+def _compute_option_scores(
+    assessments: List[HeadAssessment],
+    frame: SituationFrame,
+    option_set: Optional[List[str]] = None,
+) -> tuple[Dict[str, float], bool]:
+    """Shared scoring logic: weighted merge + phantom option filtering.
+
+    Returns (option_scores, all_phantom). Extracted from _synthesize_decision
+    so both _synthesize_decision and merge_structured_decision use identical scoring.
+    """
+    option_scores: dict[str, float] = {}
+    for assessment in assessments:
+        domain_weight = frame.domain_activation_vector.get(assessment.domain, 0.5)
+        for rank, option in enumerate(assessment.option_ranking):
+            rank_score = 1.0 / (rank + 1)
+            weighted = rank_score * domain_weight * assessment.confidence
+            option_scores[option] = option_scores.get(option, 0.0) + weighted
+
+    # Phantom option guard (existing logic from _synthesize_decision:58-77)
+    all_phantom = False
+    if option_set:
+        valid_options = {o.lower().strip(): o for o in option_set}
+        filtered_scores: dict[str, float] = {}
+        for opt, score in option_scores.items():
+            normalized = opt.lower().strip()
+            if normalized in valid_options:
+                canonical = valid_options[normalized]
+                filtered_scores[canonical] = filtered_scores.get(canonical, 0.0) + score
+        if not filtered_scores:
+            all_phantom = True
+            for opt in option_set:
+                filtered_scores[opt] = 0.01
+        else:
+            for opt in option_set:
+                if opt not in filtered_scores:
+                    filtered_scores[opt] = 0.01
+        option_scores = filtered_scores
+
+    return option_scores, all_phantom
+
 
 def merge_structured_decision(
     assessments: List[HeadAssessment],
@@ -242,39 +308,54 @@ def merge_structured_decision(
     *,
     option_set: Optional[List[str]] = None,
 ) -> StructuredDecision:
-    """Compute structured decision without surface realization. Used by deliberation loop."""
-    decision_text, mode, uncertainty, refusal = _synthesize_decision(
-        assessments, conflict, frame, option_set=option_set
-    )
-    # Extract top choice from "Recommended: X (over Y, Z)"
-    top_choice = None
-    if mode not in (DecisionMode.REFUSED,):
-        if decision_text.startswith("Recommended: "):
-            top_choice = decision_text.split("Recommended: ")[1].split(" (over")[0].strip()
+    """Compute structured decision without surface realization.
 
-    option_scores = {}
-    for assessment in assessments:
-        domain_weight = frame.domain_activation_vector.get(assessment.domain, 0.5)
-        for rank, option in enumerate(assessment.option_ranking):
-            score = (1.0 / (rank + 1)) * domain_weight * assessment.confidence
-            option_scores[option] = option_scores.get(option, 0.0) + score
+    Uses the SAME scoring logic as _synthesize_decision (via _compute_option_scores).
+    Used by deliberation loop for per-round convergence checks.
+    """
+    # Refused: out of scope
+    if frame.scope_status.value == "out_of_scope":
+        return StructuredDecision(
+            top_choice=None, option_scores={}, avg_confidence=0.0,
+            mode=DecisionMode.REFUSED, refusal_reason="out_of_scope",
+        )
 
+    option_scores, all_phantom = _compute_option_scores(assessments, frame, option_set)
+
+    if not option_scores:
+        return StructuredDecision(
+            top_choice=None, option_scores={}, avg_confidence=0.0,
+            mode=DecisionMode.REFUSED, refusal_reason="no_assessments",
+        )
+
+    ranked = sorted(option_scores.items(), key=lambda x: -x[1])
+    top_choice = ranked[0][0]
     avg_confidence = sum(a.confidence for a in assessments) / len(assessments) if assessments else 0.0
+
+    mode = DecisionMode.DIRECT
+    if frame.scope_status.value == "borderline":
+        mode = DecisionMode.DEGRADED
+    elif all_phantom:
+        mode = DecisionMode.DEGRADED
 
     return StructuredDecision(
         top_choice=top_choice,
         option_scores=option_scores,
         avg_confidence=avg_confidence,
-        mode=mode.value,
-        refusal_reason=refusal,
+        mode=mode,
+        refusal_reason="borderline_scope" if mode == DecisionMode.DEGRADED else None,
     )
 ```
 
-- [ ] **Step 2: Run tests, commit**
+- [ ] **Step 2: Update _synthesize_decision to use _compute_option_scores**
+
+Replace the inline scoring logic in `_synthesize_decision()` (lines 49-77) with a call to `_compute_option_scores()`. This ensures both functions use identical scoring — no drift possible.
+
+- [ ] **Step 3: Run tests, commit**
 
 ```bash
 git add src/twin_runtime/application/pipeline/decision_synthesizer.py
-git commit -m "feat: extract merge_structured_decision for deliberation loop"
+git commit -m "feat: extract shared scoring + merge_structured_decision for deliberation loop"
 ```
 
 ---
@@ -601,6 +682,8 @@ Create `tests/test_orchestrator.py`:
 - FORCE_REFUSE path (restricted query)
 - FORCE_DEGRADE does not override REFUSED
 - force_path override works
+- LOW_RELIABILITY post-execution: REFUSED + no assessments + skipped_domains all reliability → refusal_reason_code = LOW_RELIABILITY
+- Refusal code precedence: if deliberation loop already set INSUFFICIENT_EVIDENCE, orchestrator does not overwrite
 - Backward compat: runner.run() delegates to orchestrator
 
 - [ ] **Step 3: Run and commit**
@@ -723,21 +806,40 @@ def _load_golden_cases():
 
 
 class ScriptedLLM:
-    """Mock LLM that returns responses from a script, dispatched by schema_name or call order."""
+    """Mock LLM that returns responses from a script.
+
+    Dispatch contract (key-based, NOT prompt parsing):
+    - ask_structured with schema_name="situation_analysis" → script["interpret"]
+    - ask_structured with schema_name="head_assessment" → script["round_{N}"]["head_assess_{domain}"]
+      where N is tracked by an internal round counter, domain extracted from system prompt
+    - ask_text → script["synthesize"]
+
+    Round counter: incremented each time ALL head assessments for a round are served.
+    Domain extraction: looks for domain enum values in the system prompt (e.g., "work", "money").
+    """
 
     def __init__(self, script: dict):
         self._script = script
-        self._call_index = 0
+        self._current_round = 0
+        self._heads_served_this_round = set()
 
     def ask_structured(self, system, user, *, schema, schema_name="", max_tokens=1024):
-        # Dispatch by schema_name
         if schema_name == "situation_analysis":
             return self._script["interpret"]
         if schema_name == "head_assessment":
-            # Find the right round's assessment
-            # ... (implementation details based on round tracking)
-            pass
-        self._call_index += 1
+            # Determine domain from system prompt
+            domain = self._extract_domain(system)
+            round_key = f"round_{self._current_round}"
+            head_key = f"head_assess_{domain}"
+            # Lookup: try round-specific first, fall back to top-level
+            if round_key in self._script and head_key in self._script[round_key]:
+                result = self._script[round_key][head_key]
+            elif head_key in self._script:
+                result = self._script[head_key]
+            else:
+                raise KeyError(f"ScriptedLLM: no response for {round_key}/{head_key}")
+            self._heads_served_this_round.add(domain)
+            return result
         return {}
 
     def ask_text(self, system, user, max_tokens=1024):
@@ -746,14 +848,38 @@ class ScriptedLLM:
     def ask_json(self, system, user, max_tokens=1024):
         return {}
 
+    def advance_round(self):
+        """Call between deliberation rounds to increment the round counter."""
+        self._current_round += 1
+        self._heads_served_this_round.clear()
+
+    @staticmethod
+    def _extract_domain(system_prompt: str) -> str:
+        """Extract domain name from system prompt for head assessment dispatch."""
+        for domain in ["work", "money", "life_planning", "relationships", "public_expression"]:
+            if domain in system_prompt.lower():
+                return domain
+        return "unknown"
+
 
 @pytest.mark.parametrize("case", _load_golden_cases())
-def test_golden_trace(case):
+def test_golden_trace(case, tmp_path):
     from twin_runtime.domain.models.twin_state import TwinState
     from twin_runtime.application.orchestrator.runtime_orchestrator import run
     from twin_runtime.application.orchestrator.models import ExecutionPath
 
     twin = TwinState(**json.loads(Path(case["twin_fixture"]).read_text()))
+
+    # Load evidence fixture into temp store if provided
+    evidence_store = None
+    if case.get("evidence_fixture"):
+        from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
+        from twin_runtime.domain.evidence.base import EvidenceFragment
+        evidence_store = JsonFileEvidenceStore(tmp_path / "evidence")
+        for frag_data in json.loads(Path(case["evidence_fixture"]).read_text()):
+            frag = EvidenceFragment.model_validate(frag_data)
+            evidence_store.store_fragment(frag)
+
     llm = ScriptedLLM(case["llm_script"])
 
     force_path = None
@@ -765,6 +891,7 @@ def test_golden_trace(case):
         option_set=case["option_set"],
         twin=twin,
         llm=llm,
+        evidence_store=evidence_store,
         force_path=force_path,
     )
 
