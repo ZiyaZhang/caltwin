@@ -23,7 +23,7 @@
 | Create | `src/twin_runtime/application/orchestrator/deliberation.py` | deliberation_loop() + merge_structured_decision() + check_termination() |
 | Create | `src/twin_runtime/application/orchestrator/runtime_orchestrator.py` | run() entry point — owns interpret, delegates to single_pass or deliberation |
 | Create | `src/twin_runtime/application/pipeline/single_pass.py` | execute_from_frame_once() — plan→activate→arbitrate→synthesize |
-| Modify | `src/twin_runtime/application/pipeline/runner.py` | run() delegates to orchestrator.run() for backward compat |
+| Modify | `src/twin_runtime/application/pipeline/runner.py` | run() delegates to orchestrator.run() for backward compat **(final state after Chunk 4; untouched until then)** |
 | Modify | `src/twin_runtime/application/pipeline/decision_synthesizer.py` | Extract merge_structured_decision() from _synthesize_decision() |
 | Modify | `src/twin_runtime/application/planner/memory_access_planner.py` | Add seen_content_hashes, round_index, previous_conflict params |
 | Modify | `src/twin_runtime/cli.py` | cmd_run calls orchestrator, add --max-rounds flag |
@@ -60,6 +60,8 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from twin_runtime.domain.models.primitives import DecisionMode
 
 
 class ExecutionPath(str, Enum):
@@ -839,6 +841,7 @@ class ScriptedLLM:
             else:
                 raise KeyError(f"ScriptedLLM: no response for {round_key}/{head_key}")
             self._heads_served_this_round.add(domain)
+            self._maybe_advance_round()
             return result
         return {}
 
@@ -848,10 +851,15 @@ class ScriptedLLM:
     def ask_json(self, system, user, max_tokens=1024):
         return {}
 
-    def advance_round(self):
-        """Call between deliberation rounds to increment the round counter."""
-        self._current_round += 1
-        self._heads_served_this_round.clear()
+    def _maybe_advance_round(self):
+        """Auto-advance round when all head_assess keys for current round are consumed."""
+        round_key = f"round_{self._current_round}"
+        if round_key not in self._script:
+            return
+        expected_heads = {k for k in self._script[round_key] if k.startswith("head_assess_")}
+        if expected_heads and self._heads_served_this_round >= expected_heads:
+            self._current_round += 1
+            self._heads_served_this_round.clear()
 
     @staticmethod
     def _extract_domain(system_prompt: str) -> str:
