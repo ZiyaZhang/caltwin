@@ -42,7 +42,13 @@ def _save_config(config: dict) -> None:
     _CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
+class TwinNotFoundError(Exception):
+    """Raised when no TwinState is available."""
+    pass
+
+
 def _get_twin(config: dict) -> TwinState:
+    """Load or create TwinState. Raises TwinNotFoundError if unavailable."""
     user_id = config.get("user_id", "default")
     store = TwinStore(str(_STORE_DIR))
 
@@ -57,8 +63,16 @@ def _get_twin(config: dict) -> TwinState:
         store.save(twin)
         return twin
 
-    print("No twin state found. Run 'twin-runtime init' first.")
-    sys.exit(1)
+    raise TwinNotFoundError("No twin state found. Run 'twin-runtime init' first.")
+
+
+def _require_twin(config: dict) -> TwinState:
+    """Get twin or print friendly error and exit. For CLI commands that need twin."""
+    try:
+        return _get_twin(config)
+    except TwinNotFoundError as e:
+        print(str(e))
+        sys.exit(1)
 
 
 def cmd_init(args):
@@ -142,7 +156,7 @@ def cmd_run(args):
 
     from twin_runtime.application.pipeline.runner import run as run_pipeline
 
-    twin = _get_twin(config)
+    twin = _require_twin(config)
     trace = run_pipeline(
         query=args.query,
         option_set=args.options,
@@ -155,8 +169,8 @@ def cmd_run(args):
         from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
         trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
         trace_store.save_trace(trace)
-    except Exception as e:
-        pass  # Non-critical — trace still printed below
+    except (IOError, OSError) as e:
+        print(f"  Warning: could not persist trace: {e}", file=sys.stderr)
 
     if args.json:
         print(trace.model_dump_json(indent=2))
@@ -210,7 +224,7 @@ def cmd_compile(args):
     from twin_runtime.application.compiler.persona_compiler import PersonaCompiler
 
     registry = _build_registry(config)
-    twin = _get_twin(config)
+    twin = _require_twin(config)
 
     compiler = PersonaCompiler(registry)
     updated, graph, fragments = compiler.compile(existing=twin)
@@ -232,7 +246,7 @@ def cmd_evaluate(args):
 
     from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
-    twin = _get_twin(config)
+    twin = _require_twin(config)
     user_id = config.get("user_id", "default")
     cal_store = CalibrationStore(str(_STORE_DIR), user_id)
 
@@ -255,7 +269,7 @@ def cmd_evaluate(args):
 def cmd_status(args):
     """Show twin state summary."""
     config = _load_config()
-    twin = _get_twin(config)
+    twin = _require_twin(config)
 
     print(f"Twin: {twin.id}")
     print(f"User: {twin.user_id}")
@@ -352,7 +366,7 @@ def cmd_reflect(args):
             from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
             try:
                 twin = _get_twin(config)
-            except SystemExit:
+            except TwinNotFoundError:
                 print("Twin not initialized. Recording as standalone outcome.")
                 _save_standalone_outcome(args, cal_store, user_id)
                 return
@@ -382,8 +396,6 @@ def cmd_reflect(args):
         _save_standalone_outcome(args, cal_store, user_id)
 
 
-# Note: _get_twin may call sys.exit if not initialized. The reflect command
-# catches this via SystemExit to degrade gracefully.
 
 
 def _save_standalone_outcome(args, cal_store, user_id):
@@ -395,7 +407,7 @@ def _save_standalone_outcome(args, cal_store, user_id):
 
     outcome = OutcomeRecord(
         outcome_id=str(_uuid.uuid4()),
-        trace_id="manual",
+        trace_id="standalone",  # marked as standalone — batch_evaluate should filter these
         user_id=user_id,
         actual_choice=args.choice,
         actual_reasoning=args.reasoning,
@@ -403,6 +415,7 @@ def _save_standalone_outcome(args, cal_store, user_id):
         prediction_rank=None,  # unknown — no trace to compare against
         confidence_at_prediction=0.5,  # unknown
         domain=DomainEnum.WORK,  # default — could be enhanced later
+        task_type="standalone_reflection",  # distinguishes from pipeline-linked outcomes
         created_at=datetime.now(timezone.utc),
     )
     cal_store.save_outcome(outcome)
