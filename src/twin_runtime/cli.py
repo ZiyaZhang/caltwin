@@ -261,8 +261,12 @@ def cmd_evaluate(args):
     evaluation = evaluate_fidelity(cases, twin)
 
     cal_store.save_evaluation(evaluation)
-    print(f"\nChoice similarity: {evaluation.choice_similarity:.3f}")
+    print(f"\nChoice similarity (CF): {evaluation.choice_similarity:.3f}")
     print(f"Domain reliability: {evaluation.domain_reliability}")
+    if evaluation.failed_case_count > 0:
+        print(f"Failed cases (excluded): {evaluation.failed_case_count}")
+    if evaluation.abstention_accuracy is not None:
+        print(f"Abstention accuracy: {evaluation.abstention_accuracy:.3f} ({evaluation.abstention_case_count} OOS cases)")
     print(f"Evaluation ID: {evaluation.evaluation_id}")
 
 

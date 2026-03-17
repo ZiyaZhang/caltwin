@@ -88,6 +88,15 @@ class TwinEvaluation(BaseModel):
         description="Map of 'from->to' -> reliability score.",
     )
     failed_case_count: int = Field(default=0, description="Cases that failed due to system error, excluded from metrics")
+    abstention_accuracy: Optional[float] = Field(
+        default=None,
+        ge=0.0, le=1.0,
+        description="% of out-of-scope cases correctly REFUSED or DEGRADED",
+    )
+    abstention_case_count: int = Field(
+        default=0,
+        description="Number of out-of-scope cases evaluated for abstention",
+    )
     prior_bias_flags: List[str] = Field(default_factory=list)
     evaluated_at: datetime
     case_details: List[EvaluationCaseDetail] = Field(default_factory=list)

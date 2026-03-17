@@ -19,7 +19,7 @@ from twin_runtime.domain.models.calibration import (
     TwinEvaluation,
     TwinFidelityScore,
 )
-from twin_runtime.domain.models.primitives import DomainEnum, uncertainty_to_confidence
+from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, uncertainty_to_confidence
 from twin_runtime.domain.models.twin_state import TwinState
 
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
@@ -175,6 +175,22 @@ def evaluate_single_case(
         output_text=trace.output_text or "",
         trace_id=trace.trace_id,
     )
+
+
+def compute_abstention_accuracy(
+    decision_modes: List[DecisionMode],
+) -> Optional[float]:
+    """Compute % of out-of-scope cases that correctly triggered REFUSED or DEGRADED.
+
+    Returns None if no cases provided (metric not measurable).
+    """
+    if not decision_modes:
+        return None
+    correct = sum(
+        1 for m in decision_modes
+        if m in (DecisionMode.REFUSED, DecisionMode.DEGRADED)
+    )
+    return correct / len(decision_modes)
 
 
 def evaluate_fidelity(
