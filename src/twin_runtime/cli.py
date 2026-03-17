@@ -149,6 +149,15 @@ def cmd_run(args):
         twin=twin,
     )
 
+    # Persist trace for reflect --trace-id linkage
+    user_id = config.get("user_id", "default")
+    try:
+        from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+        trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+        trace_store.save_trace(trace)
+    except Exception as e:
+        pass  # Non-critical — trace still printed below
+
     if args.json:
         print(trace.model_dump_json(indent=2))
     else:
@@ -160,6 +169,7 @@ def cmd_run(args):
             print(f"\n{trace.output_text}")
         print(f"{'='*60}")
         print(f"Trace: {trace.trace_id}")
+        print(f"  (Use: twin-runtime reflect --trace-id {trace.trace_id} --choice \"...\")")
 
 
 def cmd_scan(args):
@@ -340,7 +350,12 @@ def cmd_reflect(args):
         try:
             from twin_runtime.application.calibration.outcome_tracker import record_outcome
             from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
-            twin = _get_twin(config)
+            try:
+                twin = _get_twin(config)
+            except SystemExit:
+                print("Twin not initialized. Recording as standalone outcome.")
+                _save_standalone_outcome(args, cal_store, user_id)
+                return
             trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
             outcome, update = record_outcome(
                 trace_id=args.trace_id,
@@ -365,6 +380,10 @@ def cmd_reflect(args):
     else:
         # No trace_id: standalone outcome (manual reflection)
         _save_standalone_outcome(args, cal_store, user_id)
+
+
+# Note: _get_twin may call sys.exit if not initialized. The reflect command
+# catches this via SystemExit to degrade gracefully.
 
 
 def _save_standalone_outcome(args, cal_store, user_id):
