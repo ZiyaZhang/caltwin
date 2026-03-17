@@ -162,17 +162,20 @@ def cmd_run(args):
     demo = getattr(args, 'demo', False)
 
     from twin_runtime.application.pipeline.runner import run as run_pipeline
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
 
     twin = _require_twin(config, demo=demo)
+    user_id = config.get("user_id", "default")
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
     trace = run_pipeline(
         query=args.query,
         option_set=args.options,
         twin=twin,
+        evidence_store=evidence_store,
     )
 
     # Persist trace for reflect --trace-id linkage (skip in demo mode)
     if not demo:
-        user_id = config.get("user_id", "default")
         try:
             from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
             trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))

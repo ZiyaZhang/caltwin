@@ -86,10 +86,11 @@ TOOLS = [
 # ---------------------------------------------------------------------------
 
 def _get_stores():
-    """Return (TwinStore, TraceStore, CalibrationStore, user_id) from env config."""
+    """Return (TwinStore, TraceStore, CalibrationStore, EvidenceStore, user_id) from env config."""
     from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
     from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore as TraceStore
     from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
     from pathlib import Path
     import os
 
@@ -99,8 +100,9 @@ def _get_stores():
     twin_store = TwinStore(store_dir)
     trace_store = TraceStore(Path(store_dir) / user_id / "traces")
     cal_store = CalibrationStore(store_dir, user_id)
+    evidence_store = JsonFileEvidenceStore(Path(store_dir) / user_id / "evidence")
 
-    return twin_store, trace_store, cal_store, user_id
+    return twin_store, trace_store, cal_store, evidence_store, user_id
 
 
 def _load_twin(twin_store, user_id):
@@ -126,12 +128,12 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
     try:
         from twin_runtime.application.pipeline.runner import run
 
-        twin_store, trace_store, _, user_id = _get_stores()
+        twin_store, trace_store, _, evidence_store, user_id = _get_stores()
         twin = _load_twin(twin_store, user_id)
         if twin is None:
             return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
 
-        trace = run(query=query, option_set=options, twin=twin)
+        trace = run(query=query, option_set=options, twin=twin, evidence_store=evidence_store)
 
         # Persist trace so twin_reflect can load it later
         trace_store.save_trace(trace)
@@ -152,7 +154,7 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
 async def _handle_status(args: Dict[str, Any]) -> str:
     """Show twin status."""
     try:
-        twin_store, _, _, user_id = _get_stores()
+        twin_store, _, _, _, user_id = _get_stores()
         twin = _load_twin(twin_store, user_id)
         if twin is None:
             return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
@@ -195,7 +197,7 @@ async def _handle_reflect(args: Dict[str, Any]) -> str:
     try:
         from twin_runtime.domain.models.primitives import OutcomeSource
 
-        twin_store, trace_store, cal_store, user_id = _get_stores()
+        twin_store, trace_store, cal_store, _, user_id = _get_stores()
         twin = _load_twin(twin_store, user_id)
 
         result = {
@@ -268,7 +270,7 @@ async def _handle_calibrate(args: Dict[str, Any]) -> str:
         from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
         from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
 
-        twin_store, _, cal_store, user_id = _get_stores()
+        twin_store, _, cal_store, _, user_id = _get_stores()
         twin = _load_twin(twin_store, user_id)
         if twin is None:
             return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
@@ -303,7 +305,7 @@ async def _handle_history(args: Dict[str, Any]) -> str:
         limit = 10
     limit = max(1, min(limit, 100))
     try:
-        _, trace_store, _, user_id = _get_stores()
+        _, trace_store, _, _, user_id = _get_stores()
 
         traces = []
         trace_dir = trace_store.base
