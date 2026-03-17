@@ -25,18 +25,24 @@ def _detect_ranking_disagreement(assessments: List[HeadAssessment]) -> bool:
 
 
 def _detect_utility_conflict(assessments: List[HeadAssessment]) -> List[str]:
-    """Find axes where heads significantly disagree on scores."""
+    """Detect utility conflicts across heads.
+
+    Two detection strategies:
+    1. Same-axis disagreement: if heads share an axis name and differ by >0.3
+    2. Cross-domain ranking inversion: if heads rank options in significantly
+       different order, flag as ranking_divergence conflict
+    """
     if len(assessments) < 2:
         return []
 
-    # Collect all axes across assessments
+    conflict_axes = []
+
+    # Strategy 1: same-axis score disagreement (original logic)
     all_axes = set()
     for a in assessments:
         for k, v in a.utility_decomposition.items():
             if isinstance(v, (int, float)):
                 all_axes.add(k)
-
-    conflict_axes = []
     for axis in all_axes:
         values = []
         for a in assessments:
@@ -45,6 +51,26 @@ def _detect_utility_conflict(assessments: List[HeadAssessment]) -> List[str]:
                 values.append(float(v))
         if len(values) >= 2 and (max(values) - min(values)) > 0.3:
             conflict_axes.append(axis)
+
+    # Strategy 2: ranking inversion detection
+    for i in range(len(assessments)):
+        for j in range(i + 1, len(assessments)):
+            r1 = assessments[i].option_ranking
+            r2 = assessments[j].option_ranking
+            if not r1 or not r2:
+                continue
+            if len(r1) >= 2 and len(r2) >= 2:
+                top1 = r1[0]
+                top2 = r2[0]
+                if top1 != top2:
+                    try:
+                        rank_of_top1_in_r2 = r2.index(top1) + 1
+                    except ValueError:
+                        rank_of_top1_in_r2 = len(r2)
+                    if rank_of_top1_in_r2 > 1:
+                        conflict_axes.append(
+                            f"ranking_divergence({assessments[i].domain.value}↔{assessments[j].domain.value})"
+                        )
 
     return conflict_axes
 

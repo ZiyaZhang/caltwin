@@ -40,6 +40,7 @@
       "head_version": "v002",
       "goal_axes": ["leverage", "learning", "efficiency", "ecosystem_fit"],
       "default_priority_order": ["leverage", "ecosystem_fit", "learning", "efficiency"],
+      "keywords": ["project", "task", "deadline", "code", "team", "meeting", "sprint", "deploy", "review", "hire", "product", "feature", "bug", "工作", "项目", "任务", "代码", "团队", "会议"],
       "evidence_weight_profile": {
         "self_report_weight": 0.3,
         "historical_behavior_weight": 0.8,
@@ -58,6 +59,7 @@
       "head_version": "v002",
       "goal_axes": ["growth", "frontier_access", "freedom", "upside_potential"],
       "default_priority_order": ["frontier_access", "growth", "upside_potential", "freedom"],
+      "keywords": ["career", "move", "city", "life", "future", "direction", "quit", "start", "long-term", "purpose", "职业", "搬家", "城市", "未来", "方向", "人生"],
       "evidence_weight_profile": {
         "self_report_weight": 0.6,
         "historical_behavior_weight": 0.5,
@@ -75,6 +77,7 @@
       "head_version": "v001",
       "goal_axes": ["growth_potential", "diversification", "low_maintenance", "tech_alignment"],
       "default_priority_order": ["growth_potential", "tech_alignment", "low_maintenance", "diversification"],
+      "keywords": ["salary", "invest", "cost", "budget", "price", "income", "equity", "薪资", "投资", "成本", "预算", "收入"],
       "evidence_weight_profile": {
         "self_report_weight": 0.5,
         "historical_behavior_weight": 0.6,
@@ -194,7 +197,40 @@
       "last_observed_at": "2026-03-15T12:00:00Z"
     }
   ],
-  "bias_correction_policy": [],
+  "bias_correction_policy": [
+    {
+      "entry_id": "bc-001",
+      "bias_pattern_id": "llm-founder-dominance-prior",
+      "target_scope": {"domain": "work", "task_type": "collaboration_style"},
+      "correction_action": "force_compare",
+      "correction_payload": {
+        "instruction": "User prefers collaborative and indirect approaches over self-directed/dominant ones. When ranking collaboration styles, favor options involving team discussion, delegating to AI first, or indirect communication over options where the user takes sole control or confronts directly."
+      },
+      "created_at": "2026-03-16T10:00:00Z",
+      "last_validated_at": "2026-03-16T10:00:00Z",
+      "validation_window": "P30D",
+      "expiry_condition": null,
+      "still_active": true,
+      "evidence_count": 4,
+      "last_observed_effect": "batch eval: 4 collaboration_style cases, only 1 top-1 hit, twin systematically chose self-directed options"
+    },
+    {
+      "entry_id": "bc-002",
+      "bias_pattern_id": "llm-mainstream-default-prior",
+      "target_scope": {"domain": "work", "task_type": "project_scoping"},
+      "correction_action": "force_compare",
+      "correction_payload": {
+        "instruction": "User prefers niche/ecosystem/plugin approaches over independent/mainstream ones. When ranking project scope options, favor options involving ecosystem integration, plugin development, or leveraging existing platforms over building standalone or mainstream alternatives."
+      },
+      "created_at": "2026-03-16T10:00:00Z",
+      "last_validated_at": "2026-03-16T10:00:00Z",
+      "validation_window": "P30D",
+      "expiry_condition": null,
+      "still_active": true,
+      "evidence_count": 2,
+      "last_observed_effect": "batch eval: 2 project_scoping cases, 0 top-1 hits, twin chose independent/mainstream options"
+    }
+  ],
   "temporal_metadata": {
     "state_valid_from": "2026-03-15T12:00:00Z",
     "state_valid_to": null,

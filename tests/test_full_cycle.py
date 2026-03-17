@@ -43,7 +43,7 @@ def test_full_cycle():
         cal_store = CalibrationStore(tmpdir, twin.user_id)
 
         # Save initial state
-        twin_store.save(twin)
+        twin_store.save_state(twin)
         print(f"[1] Initial twin: v={twin.state_version}, work_reliability={twin.domain_heads[0].head_reliability}")
 
         # --- Step 1: Run pipeline ---
@@ -128,7 +128,7 @@ def test_full_cycle():
         # --- Step 6: Apply evaluation to update twin ---
         print("\n[7] Applying evaluation to update twin state...")
         updated_twin = apply_evaluation(twin, evaluation)
-        twin_store.save(updated_twin)
+        twin_store.save_state(updated_twin)
 
         print(f"    Version: {twin.state_version} → {updated_twin.state_version}")
         print(f"    Work reliability: {twin.domain_heads[0].head_reliability} → {updated_twin.domain_heads[0].head_reliability}")

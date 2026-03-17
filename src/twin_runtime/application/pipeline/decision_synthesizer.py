@@ -21,6 +21,8 @@ def _synthesize_decision(
     assessments: List[HeadAssessment],
     conflict: Optional[ConflictReport],
     frame: SituationFrame,
+    *,
+    option_set: Optional[List[str]] = None,
 ) -> tuple[str, DecisionMode, float, Optional[str]]:
     """Step A: produce structured decision from assessments.
 
@@ -53,6 +55,27 @@ def _synthesize_decision(
             weighted = rank_score * domain_weight * assessment.confidence
             option_scores[option] = option_scores.get(option, 0.0) + weighted
 
+    # Guard: filter to valid options only (prevent phantom options)
+    _all_phantom = False
+    if option_set:
+        valid_options = {o.lower().strip(): o for o in option_set}
+        filtered_scores: dict[str, float] = {}
+        for opt, score in option_scores.items():
+            normalized = opt.lower().strip()
+            if normalized in valid_options:
+                canonical = valid_options[normalized]
+                filtered_scores[canonical] = filtered_scores.get(canonical, 0.0) + score
+        if not filtered_scores:
+            _all_phantom = True
+            for opt in option_set:
+                filtered_scores[opt] = 0.01
+            mode = DecisionMode.DEGRADED
+        else:
+            for opt in option_set:
+                if opt not in filtered_scores:
+                    filtered_scores[opt] = 0.01
+        option_scores = filtered_scores
+
     if not option_scores:
         return "Unable to evaluate options.", DecisionMode.REFUSED, 1.0, "no_assessments"
 
@@ -62,6 +85,8 @@ def _synthesize_decision(
     # Uncertainty: inverse of confidence spread
     avg_confidence = sum(a.confidence for a in assessments) / len(assessments)
     uncertainty = 1.0 - avg_confidence
+    if _all_phantom:
+        uncertainty = min(1.0, uncertainty + 0.3)
     if conflict and not conflict.resolvable_by_system:
         uncertainty = min(1.0, uncertainty + 0.2)
 
@@ -138,7 +163,7 @@ def synthesize(
 ) -> RuntimeDecisionTrace:
     """Full synthesis: Step A (structured) + Step B (surface) -> RuntimeDecisionTrace."""
     decision, mode, uncertainty, refusal = _synthesize_decision(
-        assessments, conflict, frame
+        assessments, conflict, frame, option_set=option_set
     )
 
     output_text = _surface_realize(

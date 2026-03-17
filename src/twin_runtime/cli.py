@@ -53,14 +53,14 @@ def _get_twin(config: dict) -> TwinState:
     store = TwinStore(str(_STORE_DIR))
 
     if store.has_current(user_id):
-        return store.load(user_id)
+        return store.load_state(user_id)
 
     # Check for fixture
     fixture = config.get("fixture_path")
     if fixture and Path(fixture).exists():
         with open(fixture) as f:
             twin = TwinState(**json.load(f))
-        store.save(twin)
+        store.save_state(twin)
         return twin
 
     raise TwinNotFoundError("No twin state found. Run 'twin-runtime init' first.")
@@ -141,7 +141,7 @@ def cmd_init(args):
             try:
                 with open(config["fixture_path"]) as f:
                     twin = TwinState(**json.load(f))
-                store.save(twin)
+                store.save_state(twin)
                 print(f"Twin state initialized: {twin.state_version}")
             except Exception as e:
                 print(f"Warning: could not load fixture: {e}")
@@ -231,7 +231,7 @@ def cmd_compile(args):
 
     # Save updated state
     store = TwinStore(str(_STORE_DIR))
-    store.save(updated)
+    store.save_state(updated)
 
     print(f"Compiled {len(fragments)} fragments")
     print(f"Twin state: {twin.state_version} → {updated.state_version}")
@@ -471,9 +471,10 @@ def cmd_install_skills(args):
 
 
 def cmd_mcp_serve(args):
-    """Start MCP server (stdio transport)."""
-    print("MCP server not yet implemented. Coming in v0.1.0 release.")
-    print("Track progress: https://github.com/ziya/twin-runtime")
+    """Start MCP server (stdio, blocking)."""
+    import asyncio
+    from twin_runtime.server.mcp_server import run_server
+    asyncio.run(run_server())
 
 
 # --- Helpers ---

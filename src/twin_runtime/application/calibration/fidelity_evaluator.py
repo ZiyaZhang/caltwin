@@ -10,7 +10,7 @@ import statistics
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from twin_runtime.domain.models.calibration import (
     CalibrationCase,
@@ -22,13 +22,15 @@ from twin_runtime.domain.models.calibration import (
 from twin_runtime.domain.models.primitives import DomainEnum, uncertainty_to_confidence
 from twin_runtime.domain.models.twin_state import TwinState
 
-# Lazy import sentinel — actual import deferred to avoid circular dependency at
-# collection time. The name `run` is bound at module level via _get_run() so
-# that unittest.mock.patch("...fidelity_evaluator.run") can find it.
-try:
-    from twin_runtime.application.pipeline.runner import run  # noqa: F401
-except ImportError:  # pragma: no cover — circular guard during early import
-    run = None  # type: ignore[assignment]
+from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
+
+PipelineRunner = Callable[..., RuntimeDecisionTrace]
+
+
+def _get_default_runner() -> PipelineRunner:
+    """Lazy import of pipeline runner to avoid circular dependency."""
+    from twin_runtime.application.pipeline.runner import run
+    return run
 
 
 # ---------------------------------------------------------------------------
@@ -131,12 +133,16 @@ class SingleCaseResult:
 def evaluate_single_case(
     case: CalibrationCase,
     twin: TwinState,
+    *,
+    runner: Optional[PipelineRunner] = None,
 ) -> SingleCaseResult:
     """Run twin against a single calibration case.
 
     Returns a SingleCaseResult with all per-case scoring data.
     """
-    trace = run(
+    if runner is None:
+        runner = _get_default_runner()
+    trace = runner(
         query=case.observed_context,
         option_set=case.option_set,
         twin=twin,
@@ -176,6 +182,7 @@ def evaluate_fidelity(
     twin: TwinState,
     *,
     strict: bool = False,
+    runner: Optional[PipelineRunner] = None,
 ) -> TwinEvaluation:
     """Run fidelity evaluation across multiple calibration cases.
 
@@ -196,18 +203,14 @@ def evaluate_fidelity(
 
     for case in cases:
         try:
-            result = evaluate_single_case(case, twin)
+            result = evaluate_single_case(case, twin, runner=runner)
         except Exception as e:
             if strict:
                 raise
             error_count += 1
             failed_case_ids.append(case.case_id)
             print(f"  ERROR on case {case.case_id}: {e}")
-            result = SingleCaseResult(
-                choice_score=0.0, reasoning_score=None, rank=None,
-                prediction_ranking=[], confidence_at_prediction=0.5,
-                output_text=f"ERROR: {e}", trace_id="error",
-            )
+            continue  # Skip - don't add 0.0 to scores
 
         choice_scores.append(result.choice_score)
         if result.reasoning_score is not None:
@@ -266,6 +269,7 @@ def evaluate_fidelity(
         domain_reliability=domain_reliability,
         evaluated_at=datetime.now(timezone.utc),
         case_details=case_details,
+        failed_case_count=error_count,
     )
 
 

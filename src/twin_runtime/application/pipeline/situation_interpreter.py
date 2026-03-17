@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel, ScopeStatus, UncertaintyType, OptionStructure
 from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
@@ -20,7 +20,7 @@ from twin_runtime.domain.ports.llm_port import LLMPort
 
 # --- Stage 1: Rule-based hard signal extraction ---
 
-_DOMAIN_KEYWORDS: Dict[DomainEnum, List[str]] = {
+_LEGACY_KEYWORDS: Dict[DomainEnum, List[str]] = {
     DomainEnum.WORK: ["project", "task", "deadline", "code", "team", "meeting", "sprint",
                        "deploy", "review", "hire", "product", "feature", "bug",
                        "工作", "项目", "任务", "代码", "团队", "会议"],
@@ -36,12 +36,18 @@ _DOMAIN_KEYWORDS: Dict[DomainEnum, List[str]] = {
 }
 
 
-def _keyword_scores(query: str) -> Dict[DomainEnum, float]:
-    """Count keyword hits per domain, return normalized scores."""
+def _keyword_scores_from_twin(query: str, domain_heads: list) -> Dict[DomainEnum, float]:
+    """Count keyword hits per domain using DomainHead.keywords, return normalized scores.
+
+    Falls back to _LEGACY_KEYWORDS for heads with empty keywords (pre-migration TwinState).
+    """
     q = query.lower()
     hits: Dict[DomainEnum, int] = {}
-    for domain, keywords in _DOMAIN_KEYWORDS.items():
-        hits[domain] = sum(1 for kw in keywords if kw in q)
+    for head in domain_heads:
+        keywords = head.keywords or _LEGACY_KEYWORDS.get(head.domain, [])
+        if not keywords:
+            continue
+        hits[head.domain] = sum(1 for kw in keywords if kw in q)
     total = sum(hits.values())
     if total == 0:
         return {}
@@ -51,23 +57,54 @@ def _keyword_scores(query: str) -> Dict[DomainEnum, float]:
 # --- Stage 2: LLM-assisted interpretation ---
 
 _INTERPRET_SYSTEM = """You are a situation analysis engine for a decision-twin system.
-Given a user query and the twin's valid domains, output a JSON object with exactly these fields:
-{
-  "domain_activation": {"work": 0.0-1.0, ...},
-  "reversibility": "low"|"medium"|"high",
-  "stakes": "low"|"medium"|"high",
-  "uncertainty_type": "missing_info"|"outcome_uncertainty"|"value_conflict"|"mixed",
-  "controllability": "low"|"medium"|"high",
-  "option_structure": "choose_existing"|"generate_new"|"mixed",
-  "ambiguity_score": 0.0-1.0,
-  "clarification_questions": []
+Given a user query and the twin's valid domains, analyze the situation and provide:
+- domain activation weights (0.0-1.0 for each relevant domain)
+- situational features (reversibility, stakes, uncertainty, controllability)
+- option structure and ambiguity assessment
+Only include domains from the provided valid domains list."""
+
+_SITUATION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "domain_activation": {
+            "type": "object",
+            "description": "Domain name to activation weight (0.0-1.0)",
+            "additionalProperties": {"type": "number"},
+        },
+        "reversibility": {"type": "string", "enum": ["low", "medium", "high"], "description": "How reversible is this decision"},
+        "stakes": {"type": "string", "enum": ["low", "medium", "high"], "description": "How high are the stakes"},
+        "uncertainty_type": {
+            "type": "string",
+            "enum": ["missing_info", "outcome_uncertainty", "value_conflict", "mixed"],
+            "description": "Primary source of uncertainty",
+        },
+        "controllability": {"type": "string", "enum": ["low", "medium", "high"], "description": "How much control the decision-maker has"},
+        "option_structure": {
+            "type": "string",
+            "enum": ["choose_existing", "generate_new", "mixed"],
+            "description": "Whether options are given or need to be generated",
+        },
+        "ambiguity_score": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "How ambiguous the situation is"},
+        "clarification_questions": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": [
+        "domain_activation", "reversibility", "stakes", "uncertainty_type",
+        "controllability", "option_structure", "ambiguity_score", "clarification_questions",
+    ],
 }
-Only include domains from the provided list. Output ONLY valid JSON, no explanation."""
 
 
 def _llm_interpret(query: str, valid_domains: List[str], llm: LLMPort) -> dict:
     user_msg = f"Valid domains: {valid_domains}\n\nQuery: {query}"
-    return llm.ask_json(_INTERPRET_SYSTEM, user_msg, max_tokens=512)
+    return llm.ask_structured(
+        _INTERPRET_SYSTEM, user_msg,
+        schema=_SITUATION_SCHEMA,
+        schema_name="situation_analysis",
+        max_tokens=512,
+    )
 
 
 # --- Stage 3: Constrained routing policy ---
@@ -123,7 +160,7 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Situati
     all_domains = [d.value for d in DomainEnum]
 
     # Stage 1: keyword hints
-    keyword_hints = _keyword_scores(query)
+    keyword_hints = _keyword_scores_from_twin(query, twin.domain_heads)
 
     # Stage 2: LLM interpretation
     llm_result = _llm_interpret(query, all_domains, llm)

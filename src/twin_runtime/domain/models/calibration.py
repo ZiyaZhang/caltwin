@@ -87,6 +87,7 @@ class TwinEvaluation(BaseModel):
         default_factory=dict,
         description="Map of 'from->to' -> reliability score.",
     )
+    failed_case_count: int = Field(default=0, description="Cases that failed due to system error, excluded from metrics")
     prior_bias_flags: List[str] = Field(default_factory=list)
     evaluated_at: datetime
     case_details: List[EvaluationCaseDetail] = Field(default_factory=list)

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "twin-runtime": {
+      "command": "twin-runtime",
+      "args": ["mcp-serve"]
+    }
+  }
+}

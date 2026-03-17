@@ -63,26 +63,69 @@ class TestConflictArbiter:
 
     def test_belief_conflict_only(self):
         # Different ranking but no utility axis divergence
+        # With ranking inversion detection, this now produces MIXED
+        # (ranking_divergence utility axis + ranking disagreement)
         a1 = _make_assessment(DomainEnum.WORK, ["A", "B"], {"impact": 0.7})
         a2 = _make_assessment(DomainEnum.LIFE_PLANNING, ["B", "A"], {"growth": 0.7})
         report = arbitrate([a1, a2])
         assert report is not None
-        assert ConflictType.BELIEF in report.conflict_types
+        assert ConflictType.MIXED in report.conflict_types
 
 
 class TestSituationInterpreterKeywords:
     def test_keyword_scores(self):
-        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
-        scores = _keyword_scores("I need to deploy this project before the deadline")
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores_from_twin
+        from twin_runtime.domain.models.twin_state import DomainHead, EvidenceWeightProfile
+        from datetime import datetime, timezone
+        head = DomainHead(
+            domain=DomainEnum.WORK, head_version="v1", goal_axes=["test"],
+            keywords=["project", "deploy", "deadline"],
+            evidence_weight_profile=EvidenceWeightProfile(
+                self_report_weight=1.0, historical_behavior_weight=1.0,
+                recent_behavior_weight=1.0, outcome_feedback_weight=1.0, weight_confidence=0.8,
+            ),
+            head_reliability=0.8, supported_task_types=["general"],
+            last_recalibrated_at=datetime.now(timezone.utc),
+        )
+        scores = _keyword_scores_from_twin("I need to deploy this project before the deadline", [head])
         assert DomainEnum.WORK in scores
         assert scores[DomainEnum.WORK] > 0
 
     def test_keyword_scores_empty(self):
-        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
-        scores = _keyword_scores("hello world")
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores_from_twin
+        from twin_runtime.domain.models.twin_state import DomainHead, EvidenceWeightProfile
+        from datetime import datetime, timezone
+        head = DomainHead(
+            domain=DomainEnum.WORK, head_version="v1", goal_axes=["test"],
+            keywords=["sprint"],
+            evidence_weight_profile=EvidenceWeightProfile(
+                self_report_weight=1.0, historical_behavior_weight=1.0,
+                recent_behavior_weight=1.0, outcome_feedback_weight=1.0, weight_confidence=0.8,
+            ),
+            head_reliability=0.8, supported_task_types=["general"],
+            last_recalibrated_at=datetime.now(timezone.utc),
+        )
+        scores = _keyword_scores_from_twin("hello world", [head])
         assert scores == {}
 
     def test_keyword_scores_multi_domain(self):
-        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores
-        scores = _keyword_scores("Should I invest my salary in career growth?")
+        from twin_runtime.application.pipeline.situation_interpreter import _keyword_scores_from_twin
+        from twin_runtime.domain.models.twin_state import DomainHead, EvidenceWeightProfile
+        from datetime import datetime, timezone
+        def _head(domain, keywords):
+            return DomainHead(
+                domain=domain, head_version="v1", goal_axes=["test"],
+                keywords=keywords,
+                evidence_weight_profile=EvidenceWeightProfile(
+                    self_report_weight=1.0, historical_behavior_weight=1.0,
+                    recent_behavior_weight=1.0, outcome_feedback_weight=1.0, weight_confidence=0.8,
+                ),
+                head_reliability=0.8, supported_task_types=["general"],
+                last_recalibrated_at=datetime.now(timezone.utc),
+            )
+        heads = [
+            _head(DomainEnum.MONEY, ["salary", "invest"]),
+            _head(DomainEnum.LIFE_PLANNING, ["career", "growth"]),
+        ]
+        scores = _keyword_scores_from_twin("Should I invest my salary in career growth?", heads)
         assert len(scores) >= 2

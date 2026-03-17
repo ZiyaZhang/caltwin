@@ -20,3 +20,15 @@ class DefaultLLM:
     def ask_text(self, system: str, user: str, max_tokens: int = 1024) -> str:
         from twin_runtime.infrastructure.llm.client import ask_text
         return ask_text(system, user, max_tokens=max_tokens)
+
+    def ask_structured(
+        self,
+        system: str,
+        user: str,
+        *,
+        schema: Dict[str, Any],
+        schema_name: str = "structured_output",
+        max_tokens: int = 1024,
+    ) -> Dict[str, Any]:
+        from twin_runtime.infrastructure.llm.client import ask_structured
+        return ask_structured(system, user, schema=schema, schema_name=schema_name, max_tokens=max_tokens)

@@ -48,6 +48,9 @@ class ConflictStyle(str, Enum):
     DIRECT = "direct"
     DELAYED = "delayed"
     ADAPTIVE = "adaptive"
+    COLLABORATIVE = "collaborative"
+    COMPETITIVE = "competitive"
+    ACCOMMODATING = "accommodating"
 
 
 class ControlOrientation(str, Enum):

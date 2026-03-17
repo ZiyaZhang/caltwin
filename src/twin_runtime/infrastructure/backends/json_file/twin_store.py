@@ -37,8 +37,8 @@ class TwinStore:
     def _current_path(self, user_id: str) -> Path:
         return self._user_dir(user_id) / "current.json"
 
-    def save(self, twin: TwinState) -> Path:
-        """Save a TwinState version. Also writes current.json."""
+    def save_state(self, twin: TwinState) -> str:
+        """Save a TwinState version. Also writes current.json. Returns version string."""
         version = twin.state_version
         path = self._version_path(twin.user_id, version)
         data = twin.model_dump_json(indent=2)
@@ -46,9 +46,9 @@ class TwinStore:
 
         current = self._current_path(twin.user_id)
         shutil.copy2(path, current)
-        return path
+        return version
 
-    def load(self, user_id: str, version: Optional[str] = None) -> TwinState:
+    def load_state(self, user_id: str, version: Optional[str] = None) -> TwinState:
         """Load a specific version, or current if version is None."""
         if version is None:
             path = self._current_path(user_id)
@@ -75,22 +75,26 @@ class TwinStore:
 
     def rollback(self, user_id: str, version: str) -> TwinState:
         """Set current to a previous version. Returns the loaded state."""
-        twin = self.load(user_id, version)
+        twin = self.load_state(user_id, version)
         current = self._current_path(user_id)
         src = self._version_path(user_id, version)
         shutil.copy2(src, current)
         return twin
 
-    # --- Protocol-compliant methods (TwinStateStore port) ---
+    # --- Deprecated aliases (remove in v0.2) ---
 
-    def save_state(self, state: TwinState) -> str:
-        """Protocol-compliant: save TwinState, return version string."""
-        self.save(state)
-        return state.state_version
+    def save(self, twin: TwinState) -> Path:
+        """Deprecated: use save_state() instead."""
+        import warnings
+        warnings.warn("TwinStore.save() is deprecated, use save_state()", DeprecationWarning, stacklevel=2)
+        self.save_state(twin)
+        return self._version_path(twin.user_id, twin.state_version)
 
-    def load_state(self, user_id: str, version: Optional[str] = None) -> TwinState:
-        """Protocol-compliant: load TwinState."""
-        return self.load(user_id, version)
+    def load(self, user_id: str, version: Optional[str] = None) -> TwinState:
+        """Deprecated: use load_state() instead."""
+        import warnings
+        warnings.warn("TwinStore.load() is deprecated, use load_state()", DeprecationWarning, stacklevel=2)
+        return self.load_state(user_id, version)
 
     def delete_user(self, user_id: str) -> None:
         """Delete all data for a user."""

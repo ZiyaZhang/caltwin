@@ -111,3 +111,49 @@ def ask_text(
         messages=[{"role": "user", "content": combined_user}],
     )
     return resp.content[0].text.strip()
+
+
+def ask_structured(
+    system: str,
+    user: str,
+    *,
+    schema: Dict[str, Any],
+    schema_name: str = "structured_output",
+    model: str | None = None,
+    max_tokens: int = 2048,
+) -> Dict[str, Any]:
+    """Send a prompt and get structured output via Anthropic tool_use.
+
+    Uses tool_use with tool_choice to force schema-matching response.
+    Falls back to ask_json if tool_use is unavailable.
+    """
+    client = get_client()
+
+    tool_def = {
+        "name": schema_name,
+        "description": f"Output structured data matching the {schema_name} schema.",
+        "input_schema": schema,
+    }
+
+    combined_user = f"""<instructions>
+{system}
+</instructions>
+
+{user}"""
+
+    try:
+        resp = client.messages.create(
+            model=model or _DEFAULT_MODEL,
+            max_tokens=max_tokens,
+            tools=[tool_def],
+            tool_choice={"type": "tool", "name": schema_name},
+            messages=[{"role": "user", "content": combined_user}],
+        )
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use":
+                return block.input
+        raise RuntimeError("No tool_use block in response despite forced tool_choice")
+    except (anthropic.BadRequestError, anthropic.APIStatusError, RuntimeError) as exc:
+        import logging
+        logging.getLogger(__name__).warning("tool_use failed (%s), falling back to ask_json", exc)
+        return ask_json(system, user, model=model, max_tokens=max_tokens)

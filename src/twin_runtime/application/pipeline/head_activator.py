@@ -6,7 +6,7 @@ Step A of the runtime — structured evaluation only, no prose.
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from twin_runtime.domain.models.primitives import DomainEnum, confidence_field
 from twin_runtime.domain.models.runtime import HeadAssessment
@@ -15,6 +15,37 @@ from twin_runtime.domain.models.twin_state import TwinState, DomainHead, SharedD
 from twin_runtime.domain.models.planner import EnrichedActivationContext
 from twin_runtime.domain.evidence.base import EvidenceFragment
 from twin_runtime.domain.ports.llm_port import LLMPort
+
+_HEAD_ASSESSMENT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "option_ranking": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Options ranked from best to worst",
+        },
+        "utility_decomposition": {
+            "type": "object",
+            "description": "Goal axis name to score (0.0-1.0)",
+            "additionalProperties": {"type": "number"},
+        },
+        "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+        },
+        "used_core_variables": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "used_evidence_types": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["option_ranking", "utility_decomposition", "confidence",
+                  "used_core_variables", "used_evidence_types"],
+}
 
 
 def _format_evidence(evidence: List[EvidenceFragment]) -> str:
@@ -80,15 +111,7 @@ The person you model has these decision parameters:
 - Control orientation: {causal.control_orientation.value}
 - Change strategy: {causal.change_strategy.value if causal.change_strategy else 'unknown'}
 
-Output ONLY a JSON object:
-{{
-  "option_ranking": ["best_option", "second", ...],
-  "utility_decomposition": {{"axis_name": score_0_to_1, ...}},
-  "confidence": 0.0-1.0,
-  "used_core_variables": ["var1", ...],
-  "used_evidence_types": ["type1", ...]
-}}
-Use the goal axes as utility decomposition keys. Output ONLY valid JSON."""
+Use the goal axes as utility decomposition keys when scoring."""
 
     if evidence_summary:
         system += f"""
@@ -186,7 +209,12 @@ def activate_heads(
             bias_corrections=domain_corrections,
         )
 
-        raw = llm.ask_json(system, user, max_tokens=2048)
+        raw = llm.ask_structured(
+            system, user,
+            schema=_HEAD_ASSESSMENT_SCHEMA,
+            schema_name="head_assessment",
+            max_tokens=2048,
+        )
 
         assessment = HeadAssessment(
             domain=domain,
