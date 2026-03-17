@@ -21,7 +21,7 @@
 
 | Metric | Requirement |
 |--------|-------------|
-| High-stakes golden accuracy | S2 golden traces produce correct top_choice more often than S1-only baseline (measured on curated golden trace set, NOT the calibration-based CF metric) |
+| High-stakes golden accuracy | S2 golden traces that include `expected_top_choice` produce the correct top choice. Golden harness supports `force_path: "s1_direct"` to re-run the same case in S1 mode for baseline comparison. Gate: S2 accuracy ≥ S1 accuracy on the overlapping case set. |
 | Abstention correctness | ≥ 0.9 on OOS + insufficient-evidence cases |
 | p95 latency (S1 path) | No regression from 5a (single LLM call path unchanged) |
 | p95 latency (S2 path) | ≤ 3× S1 latency (bounded by max_iterations=2) |
@@ -186,9 +186,11 @@ tests/fixtures/golden_traces/
     },
     "synthesize": "I'd prioritize the refactor."
   },
+  "force_path": null,
   "expected": {
     "situation_frame.scope_status": "in_scope",
     "decision_mode": "direct",
+    "expected_top_choice": "Refactor first",
     "refusal_reason_code": null,
     "route_path": "s1_direct",
     "boundary_policy": "normal",
@@ -271,7 +273,7 @@ Flow:
 3. If `route.boundary_policy == FORCE_REFUSE`: build refusal trace directly, return
 4. If `route.execution_path == S1_DIRECT`: call `execute_from_frame_once(frame, query, option_set, twin, ...)`
 5. If `route.execution_path == S2_DELIBERATE`: call `deliberation_loop(frame, query, option_set, twin, ..., max_iterations=max_deliberation_rounds)`
-6. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED`
+6. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED` **only if trace.decision_mode is not already REFUSED**. Hard rule: FORCE_DEGRADE only downgrades answerable results (DIRECT → DEGRADED, CLARIFIED → DEGRADED). It must never override a REFUSED decision — that would weaken abstention.
 7. Populate routing metadata on trace: `route_path`, `route_reason_codes`, `boundary_policy`, `shadow_scores`
 8. Assign `refusal_reason_code` with **precedence rule: if the deliberation loop or single-pass executor already set `refusal_reason_code` (e.g., INSUFFICIENT_EVIDENCE), do NOT overwrite it.** Only assign if currently None. This prevents the generic 5a assignment logic from clobbering specific codes set by the loop's post-abstention logic.
 9. Return trace
@@ -328,17 +330,15 @@ def decide_route(
 7. stakes == HIGH AND ambiguity_score > 0.6
    → S2_DELIBERATE + NORMAL + ["high_stakes_high_ambiguity"]
 
-8. Any ACTIVATED domain's head_reliability < twin.scope_declaration.min_reliability_threshold
-   → S2_DELIBERATE + NORMAL + ["low_reliability_activated_domain"]
-   NOTE: Only check domains present in frame.domain_activation_vector (post-filtering).
-   Pre-filtered low-reliability domains were already removed by interpret_situation.
-   This rule catches domains that passed the validity filter but are still below threshold
-   (e.g., threshold was lowered, or domain is borderline).
+8. Multiple domains activated (len > 1)
+   → S2_DELIBERATE + NORMAL + ["multi_domain"]
+   NOTE: low_reliability is NOT a route-time signal. interpret_situation already filters
+   out domains below min_reliability_threshold, so post-interpret activation only contains
+   valid domains. LOW_RELIABILITY as a refusal_reason_code is a post-execution outcome
+   (assigned by runner/orchestrator when planner skipped_domains contains reliability failures),
+   not a routing trigger.
 
-9. Multiple domains activated (len > 1) AND any activated domain has reliability < 0.6
-   → S2_DELIBERATE + NORMAL + ["multi_domain_low_reliability"]
-
-10. Default
+9. Default
    → S1_DIRECT + NORMAL + []
 ```
 
@@ -468,11 +468,14 @@ Extracted from `decision_synthesizer.py:_synthesize_decision()`. Returns structu
 ```python
 @dataclass
 class StructuredDecision:
-    top_choice: str
+    top_choice: Optional[str]  # None when REFUSED (no meaningful choice)
     option_scores: Dict[str, float]
     avg_confidence: float
     mode: DecisionMode
     refusal_reason: Optional[str]
+```
+
+When `top_choice is None` (refusal round), termination checks skip `top_choice_changed` comparison — a None-to-None transition is not a "change".
 ```
 
 ### 6.4 Termination Check
