@@ -25,7 +25,7 @@ This spec is Phase 5a of a three-part release sequence:
 
 | Phase | Name | Focus | Quantifiable Gate |
 |-------|------|-------|-------------------|
-| **5a** | **Release Hardening** (this spec) | Trust boundary, persistence, evidence wiring | Trust boundary bugs = 0, trace completeness = 100%, persistence integrity = 100% (save→load round-trip verified), every refusal has a `refusal_reason_code` |
+| **5a** | **Release Hardening** (this spec) | Trust boundary, persistence, evidence wiring | Trust boundary bugs = 0, trace completeness = 100%, persistence integrity = 100% (store matrix: twin save/load, trace save/list/load, case save/update/load, evaluation save/load, evidence store/query — all round-trip verified), every REFUSED/DEGRADED trace has `refusal_reason_code` |
 | 5b | Structured Deliberation & Abstention Router | A-lite (S1/S2 routing) + C-lite (multi-signal abstention) | High-stakes CF improves, abstention correctness ≥ 0.9, p95 latency bounded |
 | 5c | Temporal Calibration & Shadow Ontology | B-lite (time decay, drift detection, offline domain suggestion) | Drift detection has stable replay results, per-domain fidelity not degraded |
 
@@ -81,15 +81,14 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
   _twin_parent.add_argument("--demo", action="store_true",
       help="Use bundled sample twin (no data persisted)")
   ```
-- Attach `_twin_parent` as parent to subcommands that need twin: `run`, `status`, `evaluate`, `reflect`.
-- **Not demo-enabled:** `dashboard` (requires real evaluation data to be meaningful; demo would only show "no data"), `compile` (requires real configured sources; demo with sample twin + no sources is meaningless).
+- Attach `_twin_parent` as parent to subcommands that need twin: `run`, `status`, `reflect`.
+- **Not demo-enabled:** `evaluate` (requires real calibration cases; no bundled demo cases exist), `dashboard` (requires real evaluation data), `compile` (requires real configured sources).
 - `_get_twin(config, demo=False)`:
   - If `demo=True`: load from `importlib.resources` fixture, print `[DEMO MODE] Using sample twin. No data will be persisted.`
   - If `demo=False` and no twin in store: raise `TwinNotFoundError` (current behavior after removing fixture fallback).
 - **Demo mode behavior — every command explicitly defined:**
   - `cmd_run()`: skip trace persistence entirely (no `trace_store.save_trace()`), print `[DEMO MODE]` banner.
   - `cmd_reflect()`: skip outcome persistence, print `[DEMO MODE]` banner.
-  - `cmd_evaluate()`: skip evaluation persistence and case used_for_calibration writeback.
   - `cmd_status()`: read-only display of sample twin state, no persistence.
 - **Implementation guidance:** Demo mode should be implemented via **null/read-only adapters injected at composition root**, not via scattered `if demo: skip` guards in business logic. Specifically: `NullTraceStore` (all writes are no-ops), `NullCalibrationStore` (no-op writes), `FixtureTwinStore` (reads from package resource). This prevents "forgot to check demo flag" bugs as commands grow.
 
@@ -148,23 +147,40 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
   )
   refusal_reason_code: Optional[str] = Field(
       default=None,
-      description="Structured refusal reason: NO_TWIN | OUT_OF_SCOPE | NON_MODELED | INSUFFICIENT_EVIDENCE | LOW_RELIABILITY | POLICY_RESTRICTED",
+      description="Structured refusal reason: OUT_OF_SCOPE | NON_MODELED | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE | INSUFFICIENT_EVIDENCE",
   )
   ```
-- `runner.py:run()` populates after synthesis (same pattern as `trace.memory_access_plan`):
+- **scope_guard_result passing contract:** `interpret_situation()` return type changes from `SituationFrame` to `tuple[SituationFrame, Optional[ScopeGuardResult]]`. Runner unpacks both and assigns to trace:
   ```python
+  frame, guard_result = interpret_situation(query, twin, llm=llm)
+  # ... pipeline runs ...
   trace.query = query
   trace.situation_frame = frame.model_dump(mode="json")
-  if hasattr(frame, '_scope_guard_result'):  # set by interpret_situation
-      trace.scope_guard_result = asdict(frame._scope_guard_result) if frame._scope_guard_result else None
+  trace.scope_guard_result = asdict(guard_result) if guard_result else None
   ```
-- The `scope_guard_result` and `refusal_reason_code` enable downstream diagnostics: when a false-positive refusal occurs, the trace shows exactly which alias triggered it, whether it was restricted vs non_modeled, and the final scope decision.
-- `refusal_reason_code` is set by the synthesizer when mode is REFUSED or DEGRADED:
-  - `OUT_OF_SCOPE` → scope gate or empty activation
-  - `NON_MODELED` → non_modeled_capabilities hit
-  - `POLICY_RESTRICTED` → restricted_use_cases hit
-  - `LOW_RELIABILITY` → domain reliability below threshold
-  - `INSUFFICIENT_EVIDENCE` → (future, Phase 5b)
+  This avoids hidden attributes on Pydantic models. All callers of `interpret_situation()` must be updated to unpack the tuple.
+- **refusal_reason_code is set by runner (not synthesizer)**, after trace is fully assembled. Runner has visibility into all signals (guard_result, planner gating, synthesizer mode):
+  ```python
+  if trace.decision_mode == DecisionMode.REFUSED:
+      if guard_result and guard_result.restricted_hit:
+          trace.refusal_reason_code = "POLICY_RESTRICTED"
+      elif guard_result and guard_result.non_modeled_hit:
+          trace.refusal_reason_code = "NON_MODELED"
+      elif frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
+          trace.refusal_reason_code = "OUT_OF_SCOPE"
+      else:
+          trace.refusal_reason_code = "LOW_RELIABILITY"
+  elif trace.decision_mode == DecisionMode.DEGRADED:
+      trace.refusal_reason_code = "DEGRADED_SCOPE"
+  ```
+- **Taxonomy (runtime trace only, not entry-point errors):**
+  - `OUT_OF_SCOPE` — empty activation or scope gate refusal
+  - `NON_MODELED` — non_modeled_capabilities hit
+  - `POLICY_RESTRICTED` — restricted_use_cases hit
+  - `LOW_RELIABILITY` — domain reliability below threshold
+  - `DEGRADED_SCOPE` — borderline scope, answered with caveats
+  - `INSUFFICIENT_EVIDENCE` — (future, Phase 5b)
+  - **NOT in this taxonomy:** `NO_TWIN` — this is an entry-point error (CLI/MCP), not a runtime refusal. No trace is produced when twin is missing.
 - Using `mode="json"` ensures `Dict[DomainEnum, float]` keys are serialized as strings, avoiding enum key serialization bugs in `model_dump_json()`.
 
 ### 3.5 event_collector Consumes New Fields
@@ -451,7 +467,7 @@ def query(self, recall_query: RecallQuery) -> List[EvidenceFragment]:
         # Default: sort by recency (EvidenceFragment uses occurred_at, not created_at)
         fragments.sort(key=lambda f: f.occurred_at, reverse=True)
 
-    return fragments[:recall_query.limit] if hasattr(recall_query, 'limit') else fragments[:10]
+    return fragments[:recall_query.limit]
 ```
 
 No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_domain`, `target_evidence_type`, `domain_filter`, `evidence_type_filter`.
