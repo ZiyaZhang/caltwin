@@ -290,10 +290,10 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Situati
 ```
 To:
 ```python
-def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> tuple:
-    """Run the three-stage Situation Interpreter pipeline.
-    Returns (SituationFrame, Optional[ScopeGuardResult]).
-    """
+def interpret_situation(
+    query: str, twin: TwinState, *, llm: LLMPort,
+) -> tuple[SituationFrame, Optional["ScopeGuardResult"]]:
+    """Run the three-stage Situation Interpreter pipeline."""
 ```
 
 Change return (line 198-206):

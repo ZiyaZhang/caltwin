@@ -220,6 +220,19 @@ def cmd_scan(args):
     for etype, frags in sorted(by_type.items()):
         print(f"  {etype}: {len(frags)}")
 
+    # Persist evidence fragments to store
+    user_id = config.get("user_id", "default")
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    persisted = 0
+    for fragment in fragments:
+        try:
+            evidence_store.store_fragment(fragment)
+            persisted += 1
+        except Exception as e:
+            print(f"  Warning: could not persist fragment: {e}", file=sys.stderr)
+    print(f"Persisted {persisted}/{len(fragments)} evidence fragments to store.")
+
     if args.verbose:
         for f in fragments[:20]:
             print(f"\n  [{f.evidence_type.value}] {f.summary}")
@@ -244,10 +257,23 @@ def cmd_compile(args):
     store = TwinStore(str(_STORE_DIR))
     store.save_state(updated)
 
+    # Persist evidence fragments to store
+    user_id = config.get("user_id", "default")
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    persisted = 0
+    for fragment in fragments:
+        try:
+            evidence_store.store_fragment(fragment)
+            persisted += 1
+        except Exception as e:
+            print(f"  Warning: could not persist fragment: {e}", file=sys.stderr)
+
     print(f"Compiled {len(fragments)} fragments")
     print(f"Twin state: {twin.state_version} → {updated.state_version}")
     print(f"Evidence graph: {len(graph.edges)} edges")
     print(f"Evidence count: {twin.shared_decision_core.evidence_count} → {updated.shared_decision_core.evidence_count}")
+    print(f"Persisted {persisted}/{len(fragments)} evidence fragments to store.")
 
 
 def cmd_evaluate(args):
