@@ -124,6 +124,7 @@ class SingleCaseResult:
     confidence_at_prediction: float
     output_text: str
     trace_id: str
+    decision_mode: DecisionMode = DecisionMode.DIRECT
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +175,7 @@ def evaluate_single_case(
         confidence_at_prediction=confidence_at_prediction,
         output_text=trace.output_text or "",
         trace_id=trace.trace_id,
+        decision_mode=trace.decision_mode,
     )
 
 
@@ -213,6 +215,7 @@ def evaluate_fidelity(
     domain_scores: Dict[str, list[float]] = {}
     case_ids: list[str] = []
     case_details: list[EvaluationCaseDetail] = []
+    decision_modes: list[DecisionMode] = []
 
     error_count = 0
     failed_case_ids: list[str] = []
@@ -229,6 +232,7 @@ def evaluate_fidelity(
             continue  # Skip - don't add 0.0 to scores
 
         choice_scores.append(result.choice_score)
+        decision_modes.append(result.decision_mode)
         if result.reasoning_score is not None:
             reasoning_scores.append(result.reasoning_score)
 
@@ -276,6 +280,10 @@ def evaluate_fidelity(
         d: sum(scores) / len(scores) for d, scores in domain_scores.items()
     }
 
+    # Compute abstention accuracy from decision modes
+    abstention_acc = compute_abstention_accuracy(decision_modes)
+    abstention_count = len(decision_modes)
+
     return TwinEvaluation(
         evaluation_id=str(uuid.uuid4()),
         twin_state_version=twin.state_version,
@@ -286,6 +294,8 @@ def evaluate_fidelity(
         evaluated_at=datetime.now(timezone.utc),
         case_details=case_details,
         failed_case_count=error_count,
+        abstention_accuracy=round(abstention_acc, 3) if abstention_acc is not None else None,
+        abstention_case_count=abstention_count,
     )
 
 

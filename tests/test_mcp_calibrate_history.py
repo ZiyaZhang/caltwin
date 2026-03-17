@@ -42,8 +42,7 @@ class TestCalibrateTool:
 
     def test_tool_schema(self):
         cal = [t for t in TOOLS if t["name"] == "twin_calibrate"][0]
-        props = cal["inputSchema"]["properties"]
-        assert "with_bias_detection" in props
+        assert "properties" in cal["inputSchema"]
 
     def test_no_cases_returns_message(self, twin_env):
         env, _ = twin_env

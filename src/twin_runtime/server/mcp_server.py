@@ -62,13 +62,7 @@ TOOLS = [
         "description": "Run batch fidelity evaluation on calibration cases",
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "with_bias_detection": {
-                    "type": "boolean",
-                    "description": "Include prior bias detection (slower)",
-                    "default": False,
-                },
-            },
+            "properties": {},
         },
     },
     {
@@ -296,7 +290,7 @@ async def _handle_calibrate(args: Dict[str, Any]) -> str:
         if twin is None:
             return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
 
-        cases = cal_store.list_cases(used=False)
+        cases = cal_store.list_cases(used=None)
         if not cases:
             return json.dumps({"message": "No calibration cases found.", "choice_similarity": 0.0})
 

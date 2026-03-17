@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock
 from datetime import datetime, timezone
 
-from twin_runtime.domain.models.primitives import DomainEnum
+from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum
 from twin_runtime.domain.models.calibration import CalibrationCase
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace, HeadAssessment
 from twin_runtime.application.calibration.fidelity_evaluator import evaluate_single_case, evaluate_fidelity
@@ -34,6 +34,7 @@ def _make_trace(ranking=None):
     trace.output_text = "Deploy is better"
     trace.uncertainty = 0.2
     trace.trace_id = "trace-1"
+    trace.decision_mode = DecisionMode.DIRECT
     return trace
 
 
