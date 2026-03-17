@@ -17,6 +17,9 @@ def load_twin() -> TwinState:
         return TwinState(**json.load(f))
 
 
+import pytest
+
+@pytest.mark.requires_llm
 def test_pipeline_work_decision():
     """End-to-end: work domain decision with two options."""
     twin = load_twin()
@@ -28,7 +31,7 @@ def test_pipeline_work_decision():
 
     # Verify trace structure
     assert trace.trace_id is not None
-    assert trace.twin_state_version == "v001"
+    assert trace.twin_state_version == "v002"
     assert trace.situation_frame_id is not None
     assert len(trace.activated_domains) > 0
     assert len(trace.head_assessments) > 0

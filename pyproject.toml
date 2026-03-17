@@ -32,6 +32,12 @@ twin-runtime = "twin_runtime.interfaces.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+twin_runtime = ["resources/skills/*/SKILL.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "requires_llm: tests that need ANTHROPIC_API_KEY (deselect with -m 'not requires_llm')",
+]

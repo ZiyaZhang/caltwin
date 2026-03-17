@@ -31,6 +31,9 @@ def load_twin() -> TwinState:
         return TwinState(**json.load(f))
 
 
+import pytest
+
+@pytest.mark.requires_llm
 def test_full_cycle():
     """Complete flywheel: runtime → feedback → calibrate → update → verify."""
 

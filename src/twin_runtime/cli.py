@@ -325,37 +325,73 @@ def cmd_dashboard(args):
 
 def cmd_reflect(args):
     """Record an outcome for a previous decision."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    from twin_runtime.domain.models.primitives import OutcomeSource, DomainEnum, uncertainty_to_confidence
+    from twin_runtime.domain.models.calibration import OutcomeRecord
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+
     config = _load_config()
     user_id = config.get("user_id", "default")
-
-    from twin_runtime.application.calibration.outcome_tracker import record_outcome
-    from twin_runtime.domain.models.primitives import OutcomeSource
-    from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
-    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
-    from twin_runtime.infrastructure.backends.json_file.trace_store import TraceStore
-
-    twin_store = TwinStore(str(_STORE_DIR))
-    twin = _get_twin(config)
-    trace_store = TraceStore(str(_STORE_DIR), user_id)
     cal_store = CalibrationStore(str(_STORE_DIR), user_id)
 
-    try:
-        outcome, update = record_outcome(
-            trace_id=args.trace_id or "manual",
-            actual_choice=args.choice,
-            source=OutcomeSource.USER_CORRECTION,
-            actual_reasoning=args.reasoning,
-            twin=twin,
-            trace_store=trace_store,
-            calibration_store=cal_store,
-        )
-        print(f"Outcome recorded: {outcome.outcome_id}")
-        print(f"  Choice: {outcome.actual_choice}")
-        print(f"  Matched prediction: {outcome.choice_matched_prediction}")
-        if update:
-            print(f"  Calibration update generated (not yet applied)")
-    except Exception as e:
-        print(f"Error recording outcome: {e}")
+    if args.trace_id:
+        # With trace_id: use full outcome_tracker flow
+        try:
+            from twin_runtime.application.calibration.outcome_tracker import record_outcome
+            from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+            twin = _get_twin(config)
+            trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+            outcome, update = record_outcome(
+                trace_id=args.trace_id,
+                actual_choice=args.choice,
+                source=OutcomeSource.USER_CORRECTION,
+                actual_reasoning=args.reasoning,
+                twin=twin,
+                trace_store=trace_store,
+                calibration_store=cal_store,
+            )
+            print(f"Outcome recorded: {outcome.outcome_id}")
+            print(f"  Choice: {outcome.actual_choice}")
+            print(f"  Matched prediction: {outcome.choice_matched_prediction}")
+            if update:
+                print(f"  Calibration update generated (not yet applied)")
+        except FileNotFoundError:
+            print(f"Trace {args.trace_id} not found. Recording as standalone outcome.")
+            _save_standalone_outcome(args, cal_store, user_id)
+        except Exception as e:
+            print(f"Error: {e}. Recording as standalone outcome.")
+            _save_standalone_outcome(args, cal_store, user_id)
+    else:
+        # No trace_id: standalone outcome (manual reflection)
+        _save_standalone_outcome(args, cal_store, user_id)
+
+
+def _save_standalone_outcome(args, cal_store, user_id):
+    """Save an outcome without linking to a specific trace."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+    from twin_runtime.domain.models.primitives import OutcomeSource, DomainEnum
+    from twin_runtime.domain.models.calibration import OutcomeRecord
+
+    outcome = OutcomeRecord(
+        outcome_id=str(_uuid.uuid4()),
+        trace_id="manual",
+        user_id=user_id,
+        actual_choice=args.choice,
+        actual_reasoning=args.reasoning,
+        outcome_source=OutcomeSource.USER_REFLECTION if args.reasoning else OutcomeSource.USER_CORRECTION,
+        prediction_rank=None,  # unknown — no trace to compare against
+        confidence_at_prediction=0.5,  # unknown
+        domain=DomainEnum.WORK,  # default — could be enhanced later
+        created_at=datetime.now(timezone.utc),
+    )
+    cal_store.save_outcome(outcome)
+    print(f"Standalone outcome recorded: {outcome.outcome_id}")
+    print(f"  Choice: {outcome.actual_choice}")
+    if args.feedback_target:
+        print(f"  Feedback target: {args.feedback_target}")
+    print(f"  Note: No trace linked. Use --trace-id for full calibration benefit.")
 
 
 def cmd_install_skills(args):
