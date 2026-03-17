@@ -12,3 +12,4 @@ venv/
 data/
 .DS_Store
 data/store/
+fidelity_report.html
