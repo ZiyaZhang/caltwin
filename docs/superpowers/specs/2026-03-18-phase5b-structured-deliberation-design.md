@@ -21,7 +21,7 @@
 
 | Metric | Requirement |
 |--------|-------------|
-| High-stakes subset CF | Improves over 5a baseline (measured on golden traces) |
+| High-stakes golden accuracy | S2 golden traces produce correct top_choice more often than S1-only baseline (measured on curated golden trace set, NOT the calibration-based CF metric) |
 | Abstention correctness | ≥ 0.9 on OOS + insufficient-evidence cases |
 | p95 latency (S1 path) | No regression from 5a (single LLM call path unchanged) |
 | p95 latency (S2 path) | ≤ 3× S1 latency (bounded by max_iterations=2) |
@@ -187,7 +187,7 @@ tests/fixtures/golden_traces/
     "synthesize": "I'd prioritize the refactor."
   },
   "expected": {
-    "scope_status": "in_scope",
+    "situation_frame.scope_status": "in_scope",
     "decision_mode": "direct",
     "refusal_reason_code": null,
     "route_path": "s1_direct",
@@ -232,7 +232,8 @@ The `ScriptedLLM` dispatches based on call context (interpret vs head_assess vs 
 
 ### 4.4 Assertion Rules
 
-- Exact match: `scope_status`, `decision_mode`, `refusal_reason_code`, `route_path`, `boundary_policy`, `terminated_by`
+- Exact match: `decision_mode`, `refusal_reason_code`, `route_path`, `boundary_policy`, `terminated_by`
+- Nested path: `scope_status` asserted via `trace.situation_frame["scope_status"]` (not a top-level trace field)
 - Exact match: `deliberation_rounds`
 - Contains check: `activated_domains_contains`
 - Not asserted: `trace_id`, `created_at`, `output_text`, `memory_access_plan`, `shadow_scores`
@@ -272,18 +273,26 @@ Flow:
 5. If `route.execution_path == S2_DELIBERATE`: call `deliberation_loop(frame, query, option_set, twin, ..., max_iterations=max_deliberation_rounds)`
 6. If `route.boundary_policy == FORCE_DEGRADE`: cap `trace.decision_mode = DEGRADED`
 7. Populate routing metadata on trace: `route_path`, `route_reason_codes`, `boundary_policy`, `shadow_scores`
-8. Assign `refusal_reason_code` (same logic as 5a, now extended with INSUFFICIENT_EVIDENCE)
+8. Assign `refusal_reason_code` with **precedence rule: if the deliberation loop or single-pass executor already set `refusal_reason_code` (e.g., INSUFFICIENT_EVIDENCE), do NOT overwrite it.** Only assign if currently None. This prevents the generic 5a assignment logic from clobbering specific codes set by the loop's post-abstention logic.
 9. Return trace
 
-### 5.3 Runner Refactoring
+### 5.3 Single-Pass Executor (avoiding circular dependency)
 
-`runner.py:run()` gets refactored:
+**Problem:** If orchestrator imports runner and runner imports orchestrator for backward compat, we get a circular dependency.
 
-- Extract `execute_from_frame_once(frame, query, option_set, twin, *, llm, evidence_store, guard_result)` — does plan → activate → arbitrate → synthesize, returns trace. This is the "single pass executor".
-- `run()` preserved as backward-compatible entry: calls `orchestrator.run()` internally.
-- `run_once()` alias for `execute_from_frame_once()`.
+**Solution:** Extract the single-pass executor to its own module. Both orchestrator and runner depend on it, but neither depends on each other.
 
-Key: `execute_from_frame_once` does NOT call `interpret_situation`. The orchestrator owns interpretation.
+```
+application/pipeline/single_pass.py    # NEW: execute_from_frame_once()
+application/orchestrator/               # imports single_pass
+application/pipeline/runner.py          # imports single_pass (backward compat)
+```
+
+- `application/pipeline/single_pass.py` — `execute_from_frame_once(frame, query, option_set, twin, *, llm, evidence_store, guard_result)` — does plan → activate → arbitrate → synthesize, returns trace.
+- `runner.py:run()` preserved as backward-compatible entry: calls interpret_situation, then `single_pass.execute_from_frame_once()`. Does NOT import orchestrator.
+- Orchestrator calls `single_pass.execute_from_frame_once()` directly for S1, and uses the same building blocks (plan, activate, arbitrate) individually for S2 loop.
+
+Key: `execute_from_frame_once` does NOT call `interpret_situation`. The orchestrator owns interpretation. No circular imports.
 
 ### 5.4 route_decision.py
 
@@ -319,10 +328,14 @@ def decide_route(
 7. stakes == HIGH AND ambiguity_score > 0.6
    → S2_DELIBERATE + NORMAL + ["high_stakes_high_ambiguity"]
 
-8. min domain head_reliability < twin.scope_declaration.min_reliability_threshold
-   → S2_DELIBERATE + NORMAL + ["low_reliability"]
+8. Any ACTIVATED domain's head_reliability < twin.scope_declaration.min_reliability_threshold
+   → S2_DELIBERATE + NORMAL + ["low_reliability_activated_domain"]
+   NOTE: Only check domains present in frame.domain_activation_vector (post-filtering).
+   Pre-filtered low-reliability domains were already removed by interpret_situation.
+   This rule catches domains that passed the validity filter but are still below threshold
+   (e.g., threshold was lowered, or domain is borderline).
 
-9. Multiple domains activated (len > 1) AND any domain has reliability < 0.6
+9. Multiple domains activated (len > 1) AND any activated domain has reliability < 0.6
    → S2_DELIBERATE + NORMAL + ["multi_domain_low_reliability"]
 
 10. Default
@@ -387,6 +400,7 @@ def deliberation_loop(
 
 ```python
 seen_evidence_hashes: Set[str] = set()
+cumulative_evidence: List[EvidenceFragment] = []
 round_summaries: List[DeliberationRoundSummary] = []
 previous_assessments = None
 previous_conflict = None
@@ -394,6 +408,7 @@ previous_conflict = None
 # Initial pass (round 0)
 plan, evidence = plan_memory_access(frame, twin, evidence_store, query=query)
 seen_evidence_hashes.update(e.content_hash for e in evidence)
+cumulative_evidence.extend(evidence)
 assessments = activate_heads(query, option_set, context, llm=llm)
 conflict = arbitrate(assessments)
 structured = merge_structured_decision(assessments, conflict, frame, option_set=option_set)
@@ -423,8 +438,9 @@ for round_idx in range(1, max_iterations + 1):
     unique_new = [e for e in new_evidence if e.content_hash not in seen_evidence_hashes]
     seen_evidence_hashes.update(e.content_hash for e in unique_new)
 
-    # Re-activate with combined evidence
-    all_evidence = evidence + unique_new
+    # Re-activate with CUMULATIVE evidence (all rounds, not just round 0 + current)
+    cumulative_evidence.extend(unique_new)
+    all_evidence = cumulative_evidence
     assessments = activate_heads(query, option_set, context_with_evidence, llm=llm)
     previous_conflict = conflict
     conflict = arbitrate(assessments)
@@ -472,8 +488,8 @@ def check_termination(
 **Check order:**
 
 1. **CONFLICT_RESOLVED**: `current_conflict is None`, or conflict types reduced to single + `resolvable_by_system=True`
-2. **NO_NEW_EVIDENCE**: latest round `new_unique_evidence_count == 0`
-3. **CONFIDENCE_PLATEAU**: `|avg_head_confidence[current] - avg_head_confidence[previous]| < 0.05` AND `top_choice_changed == False`
+2. **NO_NEW_EVIDENCE**: latest round `new_unique_evidence_count == 0`. **Only checked when `len(round_summaries) >= 2`** (i.e., after at least one deliberation round has actually run). This prevents the loop from exiting before the first re-plan with broadened search / 2× limit has a chance to find new evidence.
+3. **CONFIDENCE_PLATEAU**: `|avg_head_confidence[current] - avg_head_confidence[previous]| < 0.05` AND `top_choice_changed == False`. Also requires `len(round_summaries) >= 2`.
 4. **MAX_ITERATIONS**: (handled by for-loop exhaustion)
 
 ### 6.5 Post-Loop Abstention
