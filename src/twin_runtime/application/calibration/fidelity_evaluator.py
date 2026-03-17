@@ -242,9 +242,6 @@ def evaluate_fidelity(
         domain_scores.setdefault(d, []).append(result.choice_score)
         case_ids.append(case.case_id)
 
-        # Mark as used
-        case.used_for_calibration = True
-
         # Build residual_direction
         actual = case.actual_choice
         if result.rank is None or result.rank > 1:
