@@ -30,6 +30,10 @@ _CONFIG_DIR = Path.home() / ".twin-runtime"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
 _STORE_DIR = _CONFIG_DIR / "store"
 
+_twin_parent = argparse.ArgumentParser(add_help=False)
+_twin_parent.add_argument("--demo", action="store_true",
+    help="Use bundled sample twin (no data persisted)")
+
 
 def _load_config() -> dict:
     if _CONFIG_FILE.exists():
@@ -47,29 +51,31 @@ class TwinNotFoundError(Exception):
     pass
 
 
-def _get_twin(config: dict) -> TwinState:
-    """Load or create TwinState. Raises TwinNotFoundError if unavailable."""
+def _get_twin(config: dict, demo: bool = False) -> TwinState:
+    """Load or create TwinState. Raises TwinNotFoundError if unavailable.
+
+    If demo=True, load from bundled sample twin fixture (no persistence).
+    """
+    if demo:
+        import importlib.resources as pkg_resources
+        ref = pkg_resources.files("twin_runtime") / "resources" / "fixtures" / "sample_twin_state.json"
+        twin = TwinState.model_validate_json(ref.read_text())
+        print("[DEMO MODE] Using sample twin. No data will be persisted.")
+        return twin
+
     user_id = config.get("user_id", "default")
     store = TwinStore(str(_STORE_DIR))
 
     if store.has_current(user_id):
         return store.load_state(user_id)
 
-    # Check for fixture
-    fixture = config.get("fixture_path")
-    if fixture and Path(fixture).exists():
-        with open(fixture) as f:
-            twin = TwinState(**json.load(f))
-        store.save_state(twin)
-        return twin
-
     raise TwinNotFoundError("No twin state found. Run 'twin-runtime init' first.")
 
 
-def _require_twin(config: dict) -> TwinState:
+def _require_twin(config: dict, demo: bool = False) -> TwinState:
     """Get twin or print friendly error and exit. For CLI commands that need twin."""
     try:
-        return _get_twin(config)
+        return _get_twin(config, demo=demo)
     except TwinNotFoundError as e:
         print(str(e))
         sys.exit(1)
@@ -153,24 +159,26 @@ def cmd_run(args):
     """Run decision pipeline."""
     config = _load_config()
     _apply_env(config)
+    demo = getattr(args, 'demo', False)
 
     from twin_runtime.application.pipeline.runner import run as run_pipeline
 
-    twin = _require_twin(config)
+    twin = _require_twin(config, demo=demo)
     trace = run_pipeline(
         query=args.query,
         option_set=args.options,
         twin=twin,
     )
 
-    # Persist trace for reflect --trace-id linkage
-    user_id = config.get("user_id", "default")
-    try:
-        from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
-        trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
-        trace_store.save_trace(trace)
-    except (IOError, OSError) as e:
-        print(f"  Warning: could not persist trace: {e}", file=sys.stderr)
+    # Persist trace for reflect --trace-id linkage (skip in demo mode)
+    if not demo:
+        user_id = config.get("user_id", "default")
+        try:
+            from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+            trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+            trace_store.save_trace(trace)
+        except (IOError, OSError) as e:
+            print(f"  Warning: could not persist trace: {e}", file=sys.stderr)
 
     if args.json:
         print(trace.model_dump_json(indent=2))
@@ -273,7 +281,8 @@ def cmd_evaluate(args):
 def cmd_status(args):
     """Show twin state summary."""
     config = _load_config()
-    twin = _require_twin(config)
+    demo = getattr(args, 'demo', False)
+    twin = _require_twin(config, demo=demo)
 
     print(f"Twin: {twin.id}")
     print(f"User: {twin.user_id}")
@@ -358,6 +367,11 @@ def cmd_reflect(args):
     from twin_runtime.domain.models.primitives import OutcomeSource, DomainEnum, uncertainty_to_confidence
     from twin_runtime.domain.models.calibration import OutcomeRecord
     from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+
+    demo = getattr(args, 'demo', False)
+    if demo:
+        print("[DEMO MODE] Reflection noted but no data will be persisted.")
+        return
 
     config = _load_config()
     user_id = config.get("user_id", "default")
@@ -555,7 +569,7 @@ def main():
     sub.add_parser("init", help="Interactive setup")
 
     # run
-    p_run = sub.add_parser("run", help="Run decision pipeline")
+    p_run = sub.add_parser("run", help="Run decision pipeline", parents=[_twin_parent])
     p_run.add_argument("query", help="Decision query")
     p_run.add_argument("-o", "--options", nargs="+", required=True, help="Options to evaluate")
     p_run.add_argument("--json", action="store_true", help="Output as JSON")
@@ -571,7 +585,7 @@ def main():
     sub.add_parser("evaluate", help="Run batch evaluation")
 
     # status
-    p_status = sub.add_parser("status", help="Show twin state")
+    p_status = sub.add_parser("status", help="Show twin state", parents=[_twin_parent])
     p_status.add_argument("--json", action="store_true", help="Full JSON output")
 
     # sources
@@ -589,7 +603,7 @@ def main():
     p_dashboard.add_argument("--open", action="store_true", help="Open in browser after generating")
 
     # reflect (Phase 4)
-    p_reflect = sub.add_parser("reflect", help="Record what you actually chose (feeds calibration)")
+    p_reflect = sub.add_parser("reflect", help="Record what you actually chose (feeds calibration)", parents=[_twin_parent])
     p_reflect.add_argument("--choice", required=True, help="What you actually chose")
     p_reflect.add_argument("--trace-id", help="Link to a specific pipeline trace")
     p_reflect.add_argument("--reasoning", help="Why you chose this")
