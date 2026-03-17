@@ -145,12 +145,12 @@ class TestPipelineIntegration:
         mock_trace.head_assessments = [MagicMock(domain=DomainEnum.WORK, confidence=0.73)]
         mock_trace.twin_state_version = "v002"
 
-        with patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
-             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
-             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
-             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn, \
-             patch("twin_runtime.application.pipeline.runner.plan_memory_access") as mock_plan, \
-             patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext") as mock_ctx:
+        with patch("twin_runtime.application.orchestrator.runtime_orchestrator.interpret_situation") as mock_si, \
+             patch("twin_runtime.application.pipeline.single_pass.activate_heads") as mock_ah, \
+             patch("twin_runtime.application.pipeline.single_pass.arbitrate") as mock_arb, \
+             patch("twin_runtime.application.pipeline.single_pass.synthesize") as mock_syn, \
+             patch("twin_runtime.application.pipeline.single_pass.plan_memory_access") as mock_plan, \
+             patch("twin_runtime.application.pipeline.single_pass.EnrichedActivationContext") as mock_ctx:
 
             mock_si.return_value = (MagicMock(), None)
             mock_plan.return_value = (mock_plan_obj, [])

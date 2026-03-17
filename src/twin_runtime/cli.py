@@ -161,17 +161,18 @@ def cmd_run(args):
     _apply_env(config)
     demo = getattr(args, 'demo', False)
 
-    from twin_runtime.application.pipeline.runner import run as run_pipeline
+    from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
     from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
 
     twin = _require_twin(config, demo=demo)
     user_id = config.get("user_id", "default")
     evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
-    trace = run_pipeline(
+    trace = orchestrator_run(
         query=args.query,
         option_set=args.options,
         twin=twin,
         evidence_store=evidence_store,
+        max_deliberation_rounds=getattr(args, 'max_rounds', 2),
     )
 
     # Persist trace for reflect --trace-id linkage (skip in demo mode)
@@ -298,6 +299,12 @@ def cmd_evaluate(args):
     evaluation = evaluate_fidelity(cases, twin)
 
     cal_store.save_evaluation(evaluation)
+
+    # Mark cases as used for calibration
+    for case in cases:
+        case.used_for_calibration = True
+        cal_store.save_case(case)
+
     print(f"\nChoice similarity (CF): {evaluation.choice_similarity:.3f}")
     print(f"Domain reliability: {evaluation.domain_reliability}")
     if evaluation.failed_case_count > 0:
@@ -604,6 +611,7 @@ def main():
     p_run.add_argument("query", help="Decision query")
     p_run.add_argument("-o", "--options", nargs="+", required=True, help="Options to evaluate")
     p_run.add_argument("--json", action="store_true", help="Output as JSON")
+    p_run.add_argument("--max-rounds", type=int, default=2, help="Max deliberation rounds for S2")
 
     # scan
     p_scan = sub.add_parser("scan", help="Scan sources for evidence")

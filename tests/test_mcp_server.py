@@ -109,7 +109,7 @@ class TestHandleDecide:
         mock_trace.model_dump_json.return_value = "{}"
 
         with patch.dict("os.environ", env), \
-             patch("twin_runtime.application.pipeline.runner.run", return_value=mock_trace), \
+             patch("twin_runtime.application.orchestrator.runtime_orchestrator.run", return_value=mock_trace), \
              patch("twin_runtime.infrastructure.backends.json_file.trace_store.JsonFileTraceStore.save_trace") as mock_save:
             result = json.loads(_run(_handle_decide({"query": "test?", "options": ["A", "B"]})))
 

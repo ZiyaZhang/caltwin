@@ -126,14 +126,14 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
         return json.dumps({"error": "'query' and 'options' are required."})
 
     try:
-        from twin_runtime.application.pipeline.runner import run
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
 
         twin_store, trace_store, _, evidence_store, user_id = _get_stores()
         twin = _load_twin(twin_store, user_id)
         if twin is None:
             return json.dumps({"error": "No twin state found. Run 'twin-runtime init' first."})
 
-        trace = run(query=query, option_set=options, twin=twin, evidence_store=evidence_store)
+        trace = orchestrator_run(query=query, option_set=options, twin=twin, evidence_store=evidence_store)
 
         # Persist trace so twin_reflect can load it later
         trace_store.save_trace(trace)
@@ -282,6 +282,10 @@ async def _handle_calibrate(args: Dict[str, Any]) -> str:
         evaluation = evaluate_fidelity(cases, twin)
         cal_store.save_evaluation(evaluation)
 
+        for case in cases:
+            case.used_for_calibration = True
+            cal_store.save_case(case)
+
         result = {
             "evaluation_id": evaluation.evaluation_id,
             "choice_similarity": evaluation.choice_similarity,
@@ -308,23 +312,20 @@ async def _handle_history(args: Dict[str, Any]) -> str:
         _, trace_store, _, _, user_id = _get_stores()
 
         traces = []
-        trace_dir = trace_store.base
-        if trace_dir.exists():
-            files = sorted(trace_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-            for f in files[:limit]:
-                try:
-                    from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
-                    trace = RuntimeDecisionTrace.model_validate_json(f.read_text())
-                    traces.append({
-                        "trace_id": trace.trace_id,
-                        "decision": trace.final_decision,
-                        "mode": trace.decision_mode.value,
-                        "uncertainty": trace.uncertainty,
-                        "domains": [d.value for d in trace.activated_domains],
-                        "created_at": trace.created_at.isoformat(),
-                    })
-                except Exception:
-                    continue
+        trace_ids = trace_store.list_traces(limit=limit)
+        for tid in trace_ids:
+            try:
+                trace = trace_store.load_trace(tid)
+                traces.append({
+                    "trace_id": trace.trace_id,
+                    "decision": trace.final_decision,
+                    "mode": trace.decision_mode.value,
+                    "uncertainty": trace.uncertainty,
+                    "domains": [d.value for d in trace.activated_domains],
+                    "created_at": trace.created_at.isoformat(),
+                })
+            except Exception:
+                continue
 
         return json.dumps({"traces": traces, "count": len(traces)}, indent=2, ensure_ascii=False)
     except Exception as e:

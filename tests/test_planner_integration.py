@@ -10,6 +10,12 @@ from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel
 from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 
 
+# Patch targets: runner delegates to orchestrator, which calls interpret_situation
+# then execute_from_frame_once (single_pass). Inner functions live in single_pass.
+_ORCH = "twin_runtime.application.orchestrator.runtime_orchestrator"
+_SP = "twin_runtime.application.pipeline.single_pass"
+
+
 class TestPlannerInPipeline:
     def test_planner_called_when_store_provided(self):
         """Verify planner is invoked with evidence_store during pipeline run."""
@@ -19,14 +25,14 @@ class TestPlannerInPipeline:
         mock_store = MagicMock()
         mock_context = MagicMock(spec=EnrichedActivationContext)
 
-        with patch("twin_runtime.application.pipeline.runner.plan_memory_access",
+        with patch(f"{_SP}.plan_memory_access",
                     return_value=(empty_plan, [])) as mock_planner, \
-             patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext",
+             patch(f"{_SP}.EnrichedActivationContext",
                     return_value=mock_context), \
-             patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
-             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
-             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
-             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
+             patch(f"{_ORCH}.interpret_situation") as mock_si, \
+             patch(f"{_SP}.activate_heads") as mock_ah, \
+             patch(f"{_SP}.arbitrate") as mock_arb, \
+             patch(f"{_SP}.synthesize") as mock_syn:
 
             mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
@@ -51,14 +57,14 @@ class TestPlannerInPipeline:
         empty_plan = MemoryAccessPlan(rationale="test", domains_to_activate=[DomainEnum.WORK])
         mock_context = MagicMock(spec=EnrichedActivationContext)
 
-        with patch("twin_runtime.application.pipeline.runner.plan_memory_access",
+        with patch(f"{_SP}.plan_memory_access",
                     return_value=(empty_plan, [])), \
-             patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext",
+             patch(f"{_SP}.EnrichedActivationContext",
                     return_value=mock_context) as mock_ctx_cls, \
-             patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
-             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
-             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
-             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
+             patch(f"{_ORCH}.interpret_situation") as mock_si, \
+             patch(f"{_SP}.activate_heads") as mock_ah, \
+             patch(f"{_SP}.arbitrate") as mock_arb, \
+             patch(f"{_SP}.synthesize") as mock_syn:
 
             mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
@@ -126,14 +132,14 @@ class TestPlannerInPipeline:
         mock_frag = MagicMock(spec=EvidenceFragment)
         mock_context = MagicMock(spec=EnrichedActivationContext)
 
-        with patch("twin_runtime.application.pipeline.runner.plan_memory_access",
+        with patch(f"{_SP}.plan_memory_access",
                     return_value=(plan, [mock_frag])), \
-             patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext",
+             patch(f"{_SP}.EnrichedActivationContext",
                     return_value=mock_context), \
-             patch("twin_runtime.application.pipeline.runner.interpret_situation") as mock_si, \
-             patch("twin_runtime.application.pipeline.runner.activate_heads") as mock_ah, \
-             patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
-             patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
+             patch(f"{_ORCH}.interpret_situation") as mock_si, \
+             patch(f"{_SP}.activate_heads") as mock_ah, \
+             patch(f"{_SP}.arbitrate") as mock_arb, \
+             patch(f"{_SP}.synthesize") as mock_syn:
 
             mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
