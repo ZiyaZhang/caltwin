@@ -314,7 +314,11 @@ async def _handle_calibrate(args: Dict[str, Any]) -> str:
 
 async def _handle_history(args: Dict[str, Any]) -> str:
     """List recent decision traces."""
-    limit = args.get("limit", 10)
+    try:
+        limit = int(args.get("limit", 10))
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(limit, 100))
     try:
         _, trace_store, _, user_id = _get_stores()
 

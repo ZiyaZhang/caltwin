@@ -215,7 +215,7 @@ def evaluate_fidelity(
     domain_scores: Dict[str, list[float]] = {}
     case_ids: list[str] = []
     case_details: list[EvaluationCaseDetail] = []
-    decision_modes: list[DecisionMode] = []
+    oos_decision_modes: list[DecisionMode] = []  # Only OOS cases (expect_abstention=True)
 
     error_count = 0
     failed_case_ids: list[str] = []
@@ -232,7 +232,8 @@ def evaluate_fidelity(
             continue  # Skip - don't add 0.0 to scores
 
         choice_scores.append(result.choice_score)
-        decision_modes.append(result.decision_mode)
+        if case.expect_abstention:
+            oos_decision_modes.append(result.decision_mode)
         if result.reasoning_score is not None:
             reasoning_scores.append(result.reasoning_score)
 
@@ -280,9 +281,9 @@ def evaluate_fidelity(
         d: sum(scores) / len(scores) for d, scores in domain_scores.items()
     }
 
-    # Compute abstention accuracy from decision modes
-    abstention_acc = compute_abstention_accuracy(decision_modes)
-    abstention_count = len(decision_modes)
+    # Compute abstention accuracy from OOS cases only (expect_abstention=True)
+    abstention_acc = compute_abstention_accuracy(oos_decision_modes)
+    abstention_count = len(oos_decision_modes)
 
     return TwinEvaluation(
         evaluation_id=str(uuid.uuid4()),

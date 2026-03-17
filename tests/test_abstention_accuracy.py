@@ -56,47 +56,92 @@ class TestComputeAbstentionAccuracy:
 
 
 class TestAbstentionWiredIntoEvaluateFidelity:
-    """Verify evaluate_fidelity populates abstention_accuracy from decision modes."""
+    """Verify evaluate_fidelity only counts OOS cases (expect_abstention=True) for abstention."""
 
-    def test_evaluate_fidelity_sets_abstention_fields(self):
-        """evaluate_fidelity must populate abstention_accuracy and abstention_case_count."""
+    @staticmethod
+    def _mock_trace(mode=DecisionMode.DIRECT):
         from unittest.mock import MagicMock
         from twin_runtime.domain.models.primitives import DomainEnum
         from twin_runtime.domain.models.runtime import HeadAssessment, RuntimeDecisionTrace
+        trace = MagicMock(spec=RuntimeDecisionTrace)
+        trace.head_assessments = [MagicMock(spec=HeadAssessment)]
+        trace.head_assessments[0].domain = DomainEnum.WORK
+        trace.head_assessments[0].option_ranking = ["A", "B"]
+        trace.head_assessments[0].confidence = 0.5
+        trace.output_text = "test"
+        trace.uncertainty = 0.8
+        trace.trace_id = "t1"
+        trace.decision_mode = mode
+        return trace
+
+    @staticmethod
+    def _make_case(case_id, expect_abstention=False):
+        from twin_runtime.domain.models.primitives import DomainEnum
         from twin_runtime.domain.models.calibration import CalibrationCase
-        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
-
-        # Create a mock runner that returns REFUSED mode trace
-        mock_trace = MagicMock(spec=RuntimeDecisionTrace)
-        mock_trace.head_assessments = [MagicMock(spec=HeadAssessment)]
-        mock_trace.head_assessments[0].domain = DomainEnum.WORK
-        mock_trace.head_assessments[0].option_ranking = ["A", "B"]
-        mock_trace.head_assessments[0].confidence = 0.5
-        mock_trace.output_text = "test"
-        mock_trace.uncertainty = 0.8
-        mock_trace.trace_id = "t1"
-        mock_trace.decision_mode = DecisionMode.REFUSED
-
-        mock_runner = MagicMock(return_value=mock_trace)
-
-        case = CalibrationCase(
-            case_id="test-oos",
+        return CalibrationCase(
+            case_id=case_id,
             created_at="2026-03-17T00:00:00Z",
             domain_label=DomainEnum.WORK,
             task_type="test",
-            observed_context="out of scope query",
+            observed_context="query",
             option_set=["A", "B"],
             actual_choice="A",
             stakes="high",
             reversibility="low",
             confidence_of_ground_truth=0.9,
+            expect_abstention=expect_abstention,
         )
 
+    def test_oos_case_counted_for_abstention(self):
+        """OOS case (expect_abstention=True) with REFUSED → abstention_accuracy=1.0."""
+        from unittest.mock import MagicMock
+        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
+
+        runner = MagicMock(return_value=self._mock_trace(DecisionMode.REFUSED))
         twin = MagicMock()
         twin.state_version = "v1"
 
-        eval_ = evaluate_fidelity([case], twin, runner=mock_runner)
+        case = self._make_case("oos-1", expect_abstention=True)
+        eval_ = evaluate_fidelity([case], twin, runner=runner)
 
-        assert eval_.abstention_accuracy is not None
-        assert eval_.abstention_accuracy == 1.0  # 1 REFUSED out of 1
+        assert eval_.abstention_accuracy == 1.0
         assert eval_.abstention_case_count == 1
+
+    def test_in_scope_case_not_counted_for_abstention(self):
+        """In-scope case (expect_abstention=False) must NOT affect abstention metric."""
+        from unittest.mock import MagicMock
+        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
+
+        runner = MagicMock(return_value=self._mock_trace(DecisionMode.DIRECT))
+        twin = MagicMock()
+        twin.state_version = "v1"
+
+        case = self._make_case("normal-1", expect_abstention=False)
+        eval_ = evaluate_fidelity([case], twin, runner=runner)
+
+        assert eval_.abstention_accuracy is None  # No OOS cases → None
+        assert eval_.abstention_case_count == 0
+
+    def test_mixed_cases_only_oos_affects_abstention(self):
+        """Mix of in-scope and OOS cases: abstention only from OOS."""
+        from unittest.mock import MagicMock
+        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
+
+        direct_trace = self._mock_trace(DecisionMode.DIRECT)
+        refused_trace = self._mock_trace(DecisionMode.REFUSED)
+        runner = MagicMock(side_effect=[direct_trace, refused_trace, direct_trace])
+        twin = MagicMock()
+        twin.state_version = "v1"
+
+        cases = [
+            self._make_case("normal-1", expect_abstention=False),
+            self._make_case("oos-1", expect_abstention=True),
+            self._make_case("normal-2", expect_abstention=False),
+        ]
+        eval_ = evaluate_fidelity(cases, twin, runner=runner)
+
+        # Only 1 OOS case, it was REFUSED → 1.0
+        assert eval_.abstention_accuracy == 1.0
+        assert eval_.abstention_case_count == 1
+        # CF should still be computed from all 3 cases
+        assert len(eval_.case_details) == 3

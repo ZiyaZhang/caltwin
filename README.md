@@ -59,7 +59,15 @@ Or add to `.mcp.json`:
 }
 ```
 
-The MCP server exposes `twin_decide`, `twin_reflect`, and `twin_status` as tools.
+The MCP server exposes 5 tools:
+
+| Tool | Description |
+|------|-------------|
+| `twin_decide` | Run calibrated judgment on a decision |
+| `twin_reflect` | Record what you actually chose |
+| `twin_status` | Show twin state and reliability |
+| `twin_calibrate` | Run batch fidelity evaluation |
+| `twin_history` | List recent decision traces |
 
 ## What Makes This Different
 
@@ -106,6 +114,7 @@ graph TD
 |--------|-------------|---------------|
 | **Choice Fidelity (CF)** | % of decisions ranked correctly at #1 | 0.758 |
 | **Calibration Quality (CQ)** | Match between stated uncertainty and accuracy | 0.807 |
+| **Abstention Correctness** | % of out-of-scope queries correctly refused | ≥0.9 (target) |
 | **Temporal Stability (TS)** | Consistency over time | experimental -- insufficient history |
 | **Reasoning Fidelity (RF)** | Similarity of reasoning to user's own | v0.2 |
 
@@ -114,6 +123,8 @@ Generate the fidelity dashboard:
 ```bash
 twin-runtime dashboard --output fidelity_report.html --open
 ```
+
+See [docs/fidelity_report_demo.html](docs/fidelity_report_demo.html) for a sample dashboard.
 
 ## CLI Commands
 

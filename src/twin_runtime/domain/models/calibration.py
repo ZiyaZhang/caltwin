@@ -51,6 +51,11 @@ class CalibrationCase(BaseModel):
     reversibility: OrdinalTriLevel
     time_pressure: Optional[OrdinalTriLevel] = None
     confidence_of_ground_truth: float = confidence_field()
+    expect_abstention: bool = Field(
+        default=False,
+        description="True for out-of-scope cases where twin SHOULD refuse/degrade. "
+        "Only these cases contribute to abstention_accuracy.",
+    )
     used_for_calibration: bool = False
 
 
