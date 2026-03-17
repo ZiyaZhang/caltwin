@@ -28,7 +28,7 @@ class TestPlannerInPipeline:
              patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
              patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
 
-            mock_si.return_value = MagicMock()
+            mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
             mock_arb.return_value = MagicMock()
             mock_trace = MagicMock()
@@ -60,7 +60,7 @@ class TestPlannerInPipeline:
              patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
              patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
 
-            mock_si.return_value = MagicMock()
+            mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
             mock_arb.return_value = MagicMock()
             mock_syn.return_value = MagicMock()
@@ -135,7 +135,7 @@ class TestPlannerInPipeline:
              patch("twin_runtime.application.pipeline.runner.arbitrate") as mock_arb, \
              patch("twin_runtime.application.pipeline.runner.synthesize") as mock_syn:
 
-            mock_si.return_value = MagicMock()
+            mock_si.return_value = (MagicMock(), None)
             mock_ah.return_value = [MagicMock()]
             mock_arb.return_value = MagicMock()
             mock_trace = MagicMock()

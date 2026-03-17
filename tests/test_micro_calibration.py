@@ -152,7 +152,7 @@ class TestPipelineIntegration:
              patch("twin_runtime.application.pipeline.runner.plan_memory_access") as mock_plan, \
              patch("twin_runtime.application.pipeline.runner.EnrichedActivationContext") as mock_ctx:
 
-            mock_si.return_value = MagicMock()
+            mock_si.return_value = (MagicMock(), None)
             mock_plan.return_value = (mock_plan_obj, [])
             mock_ctx.return_value = MagicMock()
             mock_ah.return_value = [MagicMock(domain=DomainEnum.WORK, confidence=0.73)]

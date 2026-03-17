@@ -89,3 +89,29 @@ class TestConflictReportRankingDivergence:
             final_merge_strategy=MergeStrategy.CLARIFY,
         )
         assert report.ranking_divergence_pairs == ["work↔money"]
+
+
+class TestInterpretSituationReturnType:
+    def test_returns_tuple(self):
+        from unittest.mock import MagicMock
+        from twin_runtime.application.pipeline.situation_interpreter import interpret_situation
+        import json
+        from pathlib import Path
+        from twin_runtime.domain.models.twin_state import TwinState
+
+        llm = MagicMock()
+        llm.ask_structured.return_value = {
+            "domain_activation": {"work": 0.9},
+            "reversibility": "medium", "stakes": "medium",
+            "uncertainty_type": "mixed", "controllability": "medium",
+            "option_structure": "choose_existing",
+            "ambiguity_score": 0.3, "clarification_questions": [],
+        }
+        twin = TwinState(**json.loads(Path("tests/fixtures/sample_twin_state.json").read_text()))
+
+        result = interpret_situation("Should I deploy?", twin, llm=llm)
+        assert isinstance(result, tuple), "Must return (frame, guard_result) tuple"
+        frame, guard_result = result
+        assert hasattr(frame, "scope_status")
+        # guard_result is None until Chunk 3 adds scope guard
+        assert guard_result is None

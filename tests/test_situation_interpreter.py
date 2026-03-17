@@ -71,7 +71,7 @@ class TestInterpretSituationStructured:
             "clarification_questions": [],
         }
 
-        frame = interpret_situation("Should I deploy on Friday?", twin, llm=llm)
+        frame, _guard = interpret_situation("Should I deploy on Friday?", twin, llm=llm)
         llm.ask_structured.assert_called_once()
         call_kwargs = llm.ask_structured.call_args
         assert "schema" in call_kwargs.kwargs

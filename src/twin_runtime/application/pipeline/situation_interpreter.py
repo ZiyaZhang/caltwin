@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel, ScopeStatus, UncertaintyType, OptionStructure
 from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
@@ -155,7 +155,7 @@ def _apply_routing_policy(
 # --- Public API ---
 
 
-def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> SituationFrame:
+def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[SituationFrame, None]:
     """Run the three-stage Situation Interpreter pipeline."""
     all_domains = [d.value for d in DomainEnum]
 
@@ -195,7 +195,7 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Situati
         option_structure=OptionStructure(llm_result.get("option_structure", "choose_existing")),
     )
 
-    return SituationFrame(
+    frame = SituationFrame(
         frame_id=str(uuid.uuid4()),
         domain_activation_vector=filtered_activation,
         situation_feature_vector=feature_vector,
@@ -204,3 +204,4 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Situati
         scope_status=scope_status,
         routing_confidence=routing_confidence,
     )
+    return frame, None  # ScopeGuardResult added in Chunk 3
