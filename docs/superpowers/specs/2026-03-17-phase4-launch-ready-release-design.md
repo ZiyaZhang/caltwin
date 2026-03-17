@@ -519,7 +519,62 @@ CI/Packaging:
 - [ ] 即刻/Twitter/community post
 ```
 
-## 7. Explicitly NOT in v0.1.0
+## 7. Investment Readiness (Phase 4 Deliverables)
+
+### 7.1 Seven-Minute Demo Script
+
+A repeatable, self-contained demo that shows the full flywheel:
+
+```
+Step 1: twin-runtime init (30s — setup with fixture)
+Step 2: twin-runtime run "Should I stay or switch?" -o "Stay" "Switch" (60s — see decision + uncertainty)
+Step 3: twin-runtime reflect --trace-id <id> --choice "Switch" --reasoning "Better growth" (30s — feedback loop)
+Step 4: twin-runtime status (30s — see updated twin state)
+Step 5: twin-runtime evaluate (120s — batch fidelity with CF/CQ)
+Step 6: twin-runtime dashboard --open (30s — visual fidelity report)
+Step 7: claude mcp add ... → /twin-decide in Claude Code (120s — platform integration)
+```
+
+Each step produces visible metric change. Script lives at `demo/demo_script.md` with exact commands + expected output.
+
+### 7.2 Three Core KPIs
+
+| KPI | Definition | Current | Target |
+|-----|-----------|---------|--------|
+| **Choice Fidelity (CF)** | % of decisions twin ranks correctly at #1 | 0.758 | ≥ 0.8 |
+| **Calibration Quality (CQ/ECE)** | Match between stated uncertainty and actual accuracy | 0.807 | ≥ 0.85 |
+| **Abstention Correctness** | % of out-of-scope/low-reliability cases where twin REFUSES or DEGRADES | Not yet measured | ≥ 0.9 |
+
+Abstention Correctness = new metric. Measures: when `head_reliability < threshold`, does the pipeline correctly emit `DEGRADED` or `REFUSED`? This is critical for trust narrative.
+
+Implementation: add 3-5 out-of-scope test cases to calibration set (e.g., medical, legal, relationship advice). Run pipeline, verify REFUSED/DEGRADED mode. Track as `abstention_accuracy` in batch_evaluate output.
+
+### 7.3 Data Moat Narrative
+
+**Positioning for investors:**
+> "Every calibration cycle produces two unique assets: (1) anonymized decision patterns with ground-truth outcomes, and (2) systematic bias corrections derived from real human feedback. These compound over time and cannot be replicated by prompt engineering."
+
+**Concrete deliverables:**
+- `data/calibration_cases_raw.json` → curated, anonymizable calibration dataset
+- `bias_correction_policy` in TwinState → growing library of corrected LLM priors
+- Per-domain reliability profiles → transferable to new users as priors
+
+### 7.4 MCP Minimum Viable (3 tools)
+
+`twin_decide`, `twin_status`, `twin_reflect` — stable, callable from Claude Code. Implementation uses MCP SDK (stdio). This is the "platform integration" proof point for the demo.
+
+### 7.5 Pilot User Evidence (Post-Launch, Pre-Investment)
+
+Target: 10 designed users (5 internal Tencent, 5 external from OpenClaw community). Measure before/after:
+- Decision response time (seconds from question to committed choice)
+- Reflection quality (does user articulate reasoning more clearly?)
+- Regret rate (self-reported, 2-week follow-up)
+
+This produces a slide: "10 users, N% improvement in decision quality" — investor-ready.
+
+**Note:** This is a post-launch activity. Phase 4 code only needs to support the measurement (outcome tracking + fidelity metrics are already built). The actual user study runs after launch.
+
+## 8. Explicitly NOT in v0.1.0 (Phase 5+)
 
 - SSE/HTTP MCP transport (README states: deferred)
 - Auto-inject mode (keyword-based trigger)
