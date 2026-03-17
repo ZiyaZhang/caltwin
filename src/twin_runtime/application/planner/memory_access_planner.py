@@ -9,7 +9,7 @@ executes them against the EvidenceStore, and returns retrieved evidence.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 from twin_runtime.domain.models.planner import MemoryAccessPlan
@@ -85,6 +85,10 @@ def plan_memory_access(
     twin: TwinState,
     evidence_store: Optional[EvidenceStore] = None,
     query: str = "",
+    *,
+    seen_content_hashes: Optional[Set[str]] = None,
+    round_index: int = 0,
+    previous_conflict: Optional[Any] = None,
 ) -> Tuple[MemoryAccessPlan, List[EvidenceFragment]]:
     """Plan and execute evidence retrieval for a decision.
 
@@ -97,6 +101,12 @@ def plan_memory_access(
     budget = _DEFAULT_BUDGET
     freshness = "balanced"
     disabled: List[EvidenceType] = []
+
+    # Deliberation: increase budget when previous conflict requires more evidence
+    if round_index > 0 and previous_conflict is not None:
+        if getattr(previous_conflict, "requires_more_evidence", False):
+            budget = budget * 2
+            rationale_parts.append(f"Round {round_index}: doubled budget due to unresolved conflict")
 
     user_id = twin.user_id
 
@@ -220,6 +230,10 @@ def plan_memory_access(
             all_evidence.extend(results)
         except Exception:
             logger.warning("EvidenceStore.query() failed for %s, skipping", query.query_type, exc_info=True)
+
+    # Deliberation: filter out already-seen evidence
+    if round_index > 0 and seen_content_hashes:
+        all_evidence = [e for e in all_evidence if e.content_hash not in seen_content_hashes]
 
     # Enforce budget
     if len(all_evidence) > budget:
