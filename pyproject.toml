@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twin-runtime"
-version = "0.1.1"
-description = "OpenClaw Persona Runtime Adapter - calibrated judgment twin substrate"
+version = "0.1.0"
+description = "Calibration-first judgment twin — memory is input, calibrated judgment is output"
 requires-python = ">=3.9"
 dependencies = [
     "pydantic>=2.0,<3.0",

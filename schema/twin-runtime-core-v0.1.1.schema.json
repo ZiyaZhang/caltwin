@@ -112,8 +112,9 @@
     "CandidateSourceType": {
       "type": "string",
       "enum": [
-        "runtime",
+        "runtime_trace",
         "user_correction",
+        "user_reflection",
         "observed_outcome",
         "simulation_replay",
         "historical_rebuild"

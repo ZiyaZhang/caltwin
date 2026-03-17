@@ -317,6 +317,97 @@ def cmd_config(args):
             print(f"  {k}: {display}")
 
 
+def cmd_dashboard(args):
+    """Generate HTML fidelity dashboard."""
+    from twin_runtime.application.dashboard.cli import dashboard_command
+    dashboard_command(output=args.output, open_browser=args.open)
+
+
+def cmd_reflect(args):
+    """Record an outcome for a previous decision."""
+    config = _load_config()
+    user_id = config.get("user_id", "default")
+
+    from twin_runtime.application.calibration.outcome_tracker import record_outcome
+    from twin_runtime.domain.models.primitives import OutcomeSource
+    from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.trace_store import TraceStore
+
+    twin_store = TwinStore(str(_STORE_DIR))
+    twin = _get_twin(config)
+    trace_store = TraceStore(str(_STORE_DIR), user_id)
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+
+    try:
+        outcome, update = record_outcome(
+            trace_id=args.trace_id or "manual",
+            actual_choice=args.choice,
+            source=OutcomeSource.USER_CORRECTION,
+            actual_reasoning=args.reasoning,
+            twin=twin,
+            trace_store=trace_store,
+            calibration_store=cal_store,
+        )
+        print(f"Outcome recorded: {outcome.outcome_id}")
+        print(f"  Choice: {outcome.actual_choice}")
+        print(f"  Matched prediction: {outcome.choice_matched_prediction}")
+        if update:
+            print(f"  Calibration update generated (not yet applied)")
+    except Exception as e:
+        print(f"Error recording outcome: {e}")
+
+
+def cmd_install_skills(args):
+    """Install Claude Code skills."""
+    from pathlib import Path
+    try:
+        from importlib.resources import files
+    except ImportError:
+        from importlib_resources import files
+
+    if args.personal:
+        target = Path.home() / ".claude" / "skills"
+    else:
+        target = Path.cwd() / ".claude" / "skills"
+
+    target.mkdir(parents=True, exist_ok=True)
+
+    try:
+        skills_pkg = files("twin_runtime.resources.skills")
+    except (ModuleNotFoundError, TypeError):
+        # Fallback: try to find skills relative to this file
+        skills_pkg = Path(__file__).parent / "resources" / "skills"
+        if not skills_pkg.exists():
+            print("Error: skills resources not found. Is twin-runtime installed correctly?")
+            return
+
+    installed = []
+    for skill_dir in sorted(skills_pkg.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        skill_name = skill_dir.name
+        dest = target / skill_name
+        skill_file = skill_dir / "SKILL.md"
+        if not skill_file.exists():
+            continue
+        if dest.exists() and not args.force:
+            print(f"  SKIP {skill_name} (already exists, use --force to overwrite)")
+            continue
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "SKILL.md").write_text(skill_file.read_text())
+        installed.append(skill_name)
+        print(f"  OK   {skill_name}")
+
+    print(f"\nInstalled {len(installed)} skills to {target}")
+
+
+def cmd_mcp_serve(args):
+    """Start MCP server (stdio transport)."""
+    print("MCP server not yet implemented. Coming in v0.1.0 release.")
+    print("Track progress: https://github.com/ziya/twin-runtime")
+
+
 # --- Helpers ---
 
 def _build_registry(config: dict):
@@ -419,6 +510,27 @@ def main():
     p_config.add_argument("key", nargs="?")
     p_config.add_argument("value", nargs="?")
 
+    # dashboard (Phase 3)
+    p_dashboard = sub.add_parser("dashboard", help="Generate HTML fidelity dashboard")
+    p_dashboard.add_argument("--output", default="fidelity_report.html", help="Output file path")
+    p_dashboard.add_argument("--open", action="store_true", help="Open in browser after generating")
+
+    # reflect (Phase 4)
+    p_reflect = sub.add_parser("reflect", help="Record what you actually chose (feeds calibration)")
+    p_reflect.add_argument("--choice", required=True, help="What you actually chose")
+    p_reflect.add_argument("--trace-id", help="Link to a specific pipeline trace")
+    p_reflect.add_argument("--reasoning", help="Why you chose this")
+    p_reflect.add_argument("--feedback-target", choices=["choice", "reasoning", "confidence"],
+                           help="Where the twin was off")
+
+    # install-skills (Phase 4)
+    p_skills = sub.add_parser("install-skills", help="Install Claude Code skills")
+    p_skills.add_argument("--personal", action="store_true", help="Install to ~/.claude/skills/")
+    p_skills.add_argument("--force", action="store_true", help="Overwrite existing skills")
+
+    # mcp-serve (Phase 4)
+    sub.add_parser("mcp-serve", help="Start MCP server (stdio transport)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -434,6 +546,10 @@ def main():
         "status": cmd_status,
         "sources": cmd_sources,
         "config": cmd_config,
+        "dashboard": cmd_dashboard,
+        "reflect": cmd_reflect,
+        "install-skills": cmd_install_skills,
+        "mcp-serve": cmd_mcp_serve,
     }
     commands[args.command](args)
 

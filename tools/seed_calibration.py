@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from twin_runtime.models.primitives import CandidateSourceType, DomainEnum, OrdinalTriLevel
-from twin_runtime.calibration.event_collector import collect_manual_case
-from twin_runtime.calibration.case_manager import promote_candidate
-from twin_runtime.store.calibration_store import CalibrationStore
+from twin_runtime.domain.models.primitives import CandidateSourceType, DomainEnum, OrdinalTriLevel
+from twin_runtime.application.calibration.event_collector import collect_manual_case
+from twin_runtime.application.calibration.case_manager import promote_candidate
+from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
 STORE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "store")
 USER_ID = "user-ziya"

@@ -123,13 +123,13 @@ class TestDashboardGeneration:
 
 import tempfile
 from pathlib import Path
-from twin_runtime.interfaces.cli import dashboard_command
+from twin_runtime.application.dashboard.cli import dashboard_command
 
 
 class TestDashboardCommand:
     def test_no_scores_early_exit(self, capsys):
         from unittest.mock import patch, MagicMock
-        with patch("twin_runtime.interfaces.cli.CalibrationStore") as MockStore:
+        with patch("twin_runtime.infrastructure.backends.json_file.calibration_store.CalibrationStore") as MockStore:
             MockStore.return_value.list_fidelity_scores.return_value = []
             dashboard_command(output="/tmp/test_no_scores.html")
             captured = capsys.readouterr()
