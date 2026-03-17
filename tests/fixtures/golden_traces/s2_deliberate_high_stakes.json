@@ -1,0 +1,58 @@
+{
+  "name": "s2_deliberate_high_stakes",
+  "description": "High stakes + multi-domain triggers S2 deliberation",
+  "query": "Should I leave my job for a startup CTO role?",
+  "option_set": ["Stay", "Leave"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"work": 0.6, "money": 0.4},
+      "reversibility": "low",
+      "stakes": "high",
+      "uncertainty_type": "value_conflict",
+      "controllability": "medium",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.7,
+      "clarification_questions": []
+    },
+    "round_0": {
+      "head_assess_work": {
+        "option_ranking": ["Leave", "Stay"],
+        "utility_decomposition": {"growth": 0.9, "impact": 0.7},
+        "confidence": 0.6,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_money": {
+        "option_ranking": ["Stay", "Leave"],
+        "utility_decomposition": {"income_stability": 0.8, "equity_upside": 0.5},
+        "confidence": 0.55,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      }
+    },
+    "round_1": {
+      "head_assess_work": {
+        "option_ranking": ["Leave", "Stay"],
+        "utility_decomposition": {"growth": 0.9, "impact": 0.8},
+        "confidence": 0.7,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_money": {
+        "option_ranking": ["Stay", "Leave"],
+        "utility_decomposition": {"income_stability": 0.8, "equity_upside": 0.6},
+        "confidence": 0.65,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      }
+    },
+    "synthesize": "This is a tough call — growth vs stability."
+  },
+  "expected": {
+    "route_path": "s2_deliberate",
+    "boundary_policy": "normal"
+  }
+}

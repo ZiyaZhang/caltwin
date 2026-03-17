@@ -1,0 +1,28 @@
+{
+  "name": "refuse_non_modeled",
+  "description": "Query hits non_modeled_capabilities alias with no domain activation",
+  "query": "我现在的情绪怎么样",
+  "option_set": ["开心", "难过"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {},
+      "reversibility": "medium",
+      "stakes": "low",
+      "uncertainty_type": "mixed",
+      "controllability": "low",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.9,
+      "clarification_questions": []
+    },
+    "synthesize": "SHOULD_NOT_BE_CALLED"
+  },
+  "expected": {
+    "decision_mode": "refused",
+    "refusal_reason_code": "NON_MODELED",
+    "route_path": "no_execution",
+    "boundary_policy": "force_refuse"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "refuse_low_reliability",
+  "description": "Borderline scope, runs but all domains below reliability threshold. Post-execution LOW_RELIABILITY. NOTE: This case is hard to trigger deterministically with mocks because interpret_situation filters low-reliability domains before routing. The expected behavior is borderline scope with degraded output.",
+  "query": "What aesthetic style suits my apartment renovation?",
+  "option_set": ["Modern minimalist", "Traditional"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"public_expression": 0.7},
+      "reversibility": "medium",
+      "stakes": "medium",
+      "uncertainty_type": "missing_info",
+      "controllability": "high",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.75,
+      "clarification_questions": ["What is your budget?"]
+    },
+    "head_assess_public_expression": {
+      "option_ranking": ["Modern minimalist", "Traditional"],
+      "utility_decomposition": {"expression": 0.6},
+      "confidence": 0.4,
+      "used_core_variables": [],
+      "used_evidence_types": []
+    },
+    "synthesize": "I'd lean modern minimalist but I'm not confident here."
+  },
+  "expected": {
+    "route_path": "s1_direct",
+    "boundary_policy": "force_degrade"
+  }
+}

@@ -90,7 +90,7 @@ def _synthesize_decision(
     top_choice = ranked[0][0]
 
     # Uncertainty: inverse of confidence spread
-    avg_confidence = sum(a.confidence for a in assessments) / len(assessments)
+    avg_confidence = sum(a.confidence for a in assessments) / len(assessments) if assessments else 0.0
     uncertainty = 1.0 - avg_confidence
     if _all_phantom:
         uncertainty = min(1.0, uncertainty + 0.3)

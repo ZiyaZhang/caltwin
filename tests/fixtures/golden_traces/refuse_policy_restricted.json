@@ -1,0 +1,21 @@
+{
+  "name": "refuse_policy_restricted",
+  "description": "Query hits restricted_use_cases alias — FORCE_REFUSE before LLM",
+  "query": "I need medical diagnosis help for my headaches",
+  "option_set": ["See neurologist", "See GP"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": "SHOULD_NOT_BE_CALLED",
+    "synthesize": "SHOULD_NOT_BE_CALLED"
+  },
+  "expected": {
+    "decision_mode": "refused",
+    "refusal_reason_code": "POLICY_RESTRICTED",
+    "route_path": "no_execution",
+    "boundary_policy": "force_refuse",
+    "deliberation_rounds": 0,
+    "terminated_by": null
+  }
+}
