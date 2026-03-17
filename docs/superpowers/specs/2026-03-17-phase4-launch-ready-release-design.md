@@ -13,7 +13,7 @@
 **Tagline:** Memory is input. Calibrated judgment is output.
 
 **Alpha boundary (must appear everywhere):**
-> v0.1 is an alpha release focused on work-domain calibrated judgment.
+> v0.1.0 is an alpha release focused on work-domain calibrated judgment.
 
 **Audience funnel:**
 1. **See** → README first screen (B+A+C: problem → positioning → evidence)
@@ -44,11 +44,11 @@
     └── SKILL.md
 ```
 
-Mirror copy in `src/twin_runtime/resources/skills/` for PyPI distribution via `importlib.resources`.
+**Single source of truth:** `src/twin_runtime/resources/skills/`. The repo-root `.claude/skills/` is generated/symlinked from package resources — not maintained as a separate copy. A build script or Makefile target syncs them before release.
 
 ### Frontmatter Convention
 
-All skills are task skills with `disable-model-invocation: true`. Per-skill `allowed-tools`:
+All skills are task skills. `disable-model-invocation: true` prevents Claude from auto-triggering these skills — they must be explicitly invoked via `/twin-decide` etc. Once invoked, the skill's interaction instructions (asking questions, presenting results) execute normally. Per-skill `allowed-tools`:
 
 | Skill | allowed-tools |
 |-------|---------------|
@@ -195,18 +195,21 @@ server/
 └── mcp_server.py   # TwinMCPServer + tool handlers
 ```
 
-### Transport Abstraction
+### Implementation Approach
 
+**Use MCP SDK** (e.g., `mcp` Python package) for protocol handling. Do NOT hand-roll JSON-RPC/MCP protocol details. The SDK handles:
+- Message framing and parsing
+- Protocol handshake
+- Error formatting
+
+If no suitable SDK exists at implementation time, fall back to a minimal Transport abstraction:
 ```python
 class Transport(Protocol):
     def read_message(self) -> dict: ...
     def write_message(self, msg: dict) -> None: ...
-
-class StdioTransport:
-    """v0.1: stdin/stdout JSON-RPC."""
 ```
 
-> v0.1 ships with stdio MCP transport for Claude Code. SSE/HTTP transports are intentionally deferred.
+> v0.1.0 ships with stdio MCP transport for Claude Code. SSE/HTTP transports are intentionally deferred.
 
 ### MCP Tools
 
@@ -225,13 +228,14 @@ class StdioTransport:
 | `twin_calibrate` | `with_bias_detection?: bool` | fidelity report (CF/RF/CQ/TS) |
 | `twin_history` | `limit?: int` | recent traces list |
 
-### Protocol Support
+### Protocol Support (v0.1.0)
 
 - `initialize` / `initialized` handshake
 - `tools/list` → returns tool definitions with JSON Schema
 - `tools/call` → dispatches to handler, returns result
-- `notifications/tools/list_changed` → sent when tools update
 - Graceful shutdown on EOF / SIGINT
+
+> v0.1.0 exposes a static MCP tool set. `notifications/tools/list_changed` is deferred — tool set does not change at runtime.
 
 ### .mcp.json
 
@@ -289,7 +293,7 @@ Arguments:
   --output PATH    Output file (default: fidelity_report.html)
   --open           Open in browser after generating
 ```
-NOTE: `dashboard_command()` currently exists in `interfaces/cli.py` but is NOT wired into the main argparse dispatcher in `cli.py`. Implementation must add `dashboard` as a subcommand to the argparse tree and delegate to `dashboard_command()`.
+NOTE: `dashboard_command()` currently lives in `interfaces/cli.py`. To avoid circular import (interfaces/cli.py imports from cli.py via `*`, cli.py cannot import back), move `dashboard_command` to `application/dashboard/cli.py` as a standalone function. Then `cli.py` imports it directly from `application/dashboard/cli`. The argparse dispatcher in `cli.py` adds `dashboard` as a subcommand delegating to this function.
 
 ### Narrative Positioning
 
@@ -321,7 +325,7 @@ MCP does NOT appear in README first screen. Placed in "Integration" section:
 | `README.md` | Create | B+A+C first screen + quickstart + integration + metrics |
 | `LICENSE` | Create | Apache 2.0 full text |
 | `CONTRIBUTING.md` | Create | How to test (with/without API key), PR process, calibration case contribution |
-| `CHANGELOG.md` | Create | v0.2.0 release notes |
+| `CHANGELOG.md` | Create | v0.1.0 release notes |
 | `docs/quickstart.md` | Create | Detailed install, Claude Code setup, MCP config, common errors |
 | `docs/dashboard-screenshot.png` | Create | Screenshot of fidelity_report.html |
 | `pyproject.toml` | Modify | See below |
@@ -331,7 +335,7 @@ MCP does NOT appear in README first screen. Placed in "Integration" section:
 ```toml
 [project]
 name = "twin-runtime"
-version = "0.2.0"
+version = "0.1.0"
 description = "Calibration-first judgment twin — memory is input, calibrated judgment is output"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -365,7 +369,7 @@ Repository = "https://github.com/ziya/twin-runtime"
 where = ["src"]
 
 [tool.setuptools.package-data]
-twin_runtime = ["resources/skills/**/SKILL.md"]
+twin_runtime = ["resources/skills/*/SKILL.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -402,6 +406,22 @@ jobs:
       - uses: actions/setup-python@v5
       - run: pip install ruff
       - run: ruff check src/ tests/
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+      - name: Smoke test installed wheel
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install dist/*.whl
+          /tmp/smoke-venv/bin/twin-runtime --help
+          /tmp/smoke-venv/bin/twin-runtime install-skills --help
+          /tmp/smoke-venv/bin/python -c "from twin_runtime.resources import skills; print('skills resource OK')"
 ```
 
 ### integration.yml — Manual/weekly (needs API key secret)
@@ -439,7 +459,7 @@ Skills:
 
 MCP Server:
 - [ ] Transport protocol + StdioTransport
-- [ ] TwinMCPServer with initialize/tools_list/tools_call/list_changed
+- [ ] TwinMCPServer with initialize/tools_list/tools_call + graceful shutdown
 - [ ] twin_decide handler (launch gate)
 - [ ] twin_reflect handler (launch gate)
 - [ ] twin_status handler (launch gate)
@@ -480,7 +500,7 @@ CI/Packaging:
 - [ ] twin-runtime status → works with fixture
 - [ ] twin-runtime install-skills → skills appear in .claude/skills/
 - [ ] twin-runtime install-skills --personal → skills in ~/.claude/skills/
-- [ ] claude mcp add twin-runtime -- twin-runtime mcp-serve → MCP works
+- [ ] claude mcp add --transport stdio twin-runtime -- twin-runtime mcp-serve → MCP works
 - [ ] /twin-decide in Claude Code → end-to-end decision
 - [ ] /twin-reflect → records outcome
 - [ ] Batch eval: CF >= 0.7
@@ -491,7 +511,7 @@ CI/Packaging:
 ### Publish (Day 8)
 
 ```
-- [ ] git tag v0.2.0
+- [ ] git tag v0.1.0
 - [ ] PyPI publish (twine upload)
 - [ ] GitHub Release with changelog
 - [ ] 朋友圈 post (dashboard screenshot + positioning)
@@ -499,7 +519,7 @@ CI/Packaging:
 - [ ] 即刻/Twitter/community post
 ```
 
-## 7. Explicitly NOT in v0.1
+## 7. Explicitly NOT in v0.1.0
 
 - SSE/HTTP MCP transport (README states: deferred)
 - Auto-inject mode (keyword-based trigger)
