@@ -15,6 +15,39 @@ from twin_runtime.domain.models.runtime import ConflictReport, HeadAssessment, R
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState
 from twin_runtime.domain.ports.llm_port import LLMPort
+from twin_runtime.application.orchestrator.models import StructuredDecision
+
+
+def _compute_option_scores(assessments, frame, option_set=None):
+    """Shared scoring: weighted merge + phantom option filtering."""
+    option_scores = {}
+    for assessment in assessments:
+        domain_weight = frame.domain_activation_vector.get(assessment.domain, 0.5)
+        for rank, option in enumerate(assessment.option_ranking):
+            rank_score = 1.0 / (rank + 1)
+            weighted = rank_score * domain_weight * assessment.confidence
+            option_scores[option] = option_scores.get(option, 0.0) + weighted
+
+    all_phantom = False
+    if option_set:
+        valid_options = {o.lower().strip(): o for o in option_set}
+        filtered_scores = {}
+        for opt, score in option_scores.items():
+            normalized = opt.lower().strip()
+            if normalized in valid_options:
+                canonical = valid_options[normalized]
+                filtered_scores[canonical] = filtered_scores.get(canonical, 0.0) + score
+        if not filtered_scores:
+            all_phantom = True
+            for opt in option_set:
+                filtered_scores[opt] = 0.01
+        else:
+            for opt in option_set:
+                if opt not in filtered_scores:
+                    filtered_scores[opt] = 0.01
+        option_scores = filtered_scores
+
+    return option_scores, all_phantom
 
 
 def _synthesize_decision(
@@ -45,36 +78,10 @@ def _synthesize_decision(
     else:
         mode = DecisionMode.DIRECT
 
-    # Merge rankings: weighted by domain activation and head confidence
-    option_scores: dict[str, float] = {}
-    for assessment in assessments:
-        domain_weight = frame.domain_activation_vector.get(assessment.domain, 0.5)
-        for rank, option in enumerate(assessment.option_ranking):
-            # Score: higher rank = higher score, weighted by domain activation * confidence
-            rank_score = 1.0 / (rank + 1)
-            weighted = rank_score * domain_weight * assessment.confidence
-            option_scores[option] = option_scores.get(option, 0.0) + weighted
-
-    # Guard: filter to valid options only (prevent phantom options)
-    _all_phantom = False
-    if option_set:
-        valid_options = {o.lower().strip(): o for o in option_set}
-        filtered_scores: dict[str, float] = {}
-        for opt, score in option_scores.items():
-            normalized = opt.lower().strip()
-            if normalized in valid_options:
-                canonical = valid_options[normalized]
-                filtered_scores[canonical] = filtered_scores.get(canonical, 0.0) + score
-        if not filtered_scores:
-            _all_phantom = True
-            for opt in option_set:
-                filtered_scores[opt] = 0.01
-            mode = DecisionMode.DEGRADED
-        else:
-            for opt in option_set:
-                if opt not in filtered_scores:
-                    filtered_scores[opt] = 0.01
-        option_scores = filtered_scores
+    # Merge rankings using shared scoring helper
+    option_scores, _all_phantom = _compute_option_scores(assessments, frame, option_set)
+    if _all_phantom:
+        mode = DecisionMode.DEGRADED
 
     if not option_scores:
         return "Unable to evaluate options.", DecisionMode.REFUSED, 1.0, "no_assessments"
@@ -99,6 +106,41 @@ def _synthesize_decision(
         refusal = "borderline_scope"
 
     return decision, mode, round(uncertainty, 3), refusal
+
+
+def merge_structured_decision(assessments, conflict, frame, *, option_set=None):
+    """Structured decision without surface realization. For deliberation loop convergence checks."""
+    if frame.scope_status.value == "out_of_scope":
+        return StructuredDecision(
+            top_choice=None, option_scores={}, avg_confidence=0.0,
+            mode=DecisionMode.REFUSED, refusal_reason="out_of_scope",
+        )
+
+    option_scores, all_phantom = _compute_option_scores(assessments, frame, option_set)
+
+    if not option_scores:
+        return StructuredDecision(
+            top_choice=None, option_scores={}, avg_confidence=0.0,
+            mode=DecisionMode.REFUSED, refusal_reason="no_assessments",
+        )
+
+    ranked = sorted(option_scores.items(), key=lambda x: -x[1])
+    top_choice = ranked[0][0]
+    avg_confidence = sum(a.confidence for a in assessments) / len(assessments) if assessments else 0.0
+
+    mode = DecisionMode.DIRECT
+    if frame.scope_status.value == "borderline":
+        mode = DecisionMode.DEGRADED
+    elif all_phantom:
+        mode = DecisionMode.DEGRADED
+    elif conflict and conflict.final_merge_strategy.value == "clarify":
+        mode = DecisionMode.CLARIFIED
+
+    return StructuredDecision(
+        top_choice=top_choice, option_scores=option_scores,
+        avg_confidence=avg_confidence, mode=mode,
+        refusal_reason="borderline_scope" if mode == DecisionMode.DEGRADED else None,
+    )
 
 
 def _surface_realize(
