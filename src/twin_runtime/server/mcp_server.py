@@ -104,27 +104,10 @@ def _get_stores():
 
 
 def _load_twin(twin_store, user_id):
-    """Load twin state from store, falling back to package resource fixture."""
+    """Load twin state from store. Returns None if not found (fail-closed)."""
     from twin_runtime.domain.models.twin_state import TwinState
-
     if twin_store.has_current(user_id):
         return twin_store.load_state(user_id)
-
-    # Fallback: try package resource (works in wheel installs)
-    try:
-        import importlib.resources as pkg_resources
-        ref = pkg_resources.files("twin_runtime") / "resources" / "fixtures" / "sample_twin_state.json"
-        twin = TwinState.model_validate_json(ref.read_text())
-        return twin
-    except Exception:
-        pass
-
-    # Last resort: CWD fixture (dev mode)
-    from pathlib import Path
-    fixture = Path("tests/fixtures/sample_twin_state.json")
-    if fixture.exists():
-        return TwinState(**json.loads(fixture.read_text()))
-
     return None
 
 

@@ -21,8 +21,8 @@ class TestPackageResourceFallback:
         assert twin.user_id
         assert len(twin.domain_heads) > 0
 
-    def test_mcp_load_twin_uses_fixture(self, tmp_path, monkeypatch):
-        """_load_twin should fall back to package resource when store is empty."""
+    def test_mcp_load_twin_returns_none_when_empty(self, tmp_path, monkeypatch):
+        """_load_twin should return None when store is empty (fail-closed)."""
         from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
         from twin_runtime.server.mcp_server import _load_twin
 
@@ -30,5 +30,4 @@ class TestPackageResourceFallback:
         monkeypatch.chdir(tmp_path)
 
         twin = _load_twin(store, "nonexistent-user")
-        assert twin is not None, "Fixture fallback must work when store is empty"
-        assert twin.user_id
+        assert twin is None, "Must return None when no twin in store (fail-closed)"
