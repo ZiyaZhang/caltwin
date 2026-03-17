@@ -60,6 +60,7 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
   - `cmd_run()`: skip trace persistence entirely (no `trace_store.save_trace()`), print `[DEMO MODE]` banner.
   - `cmd_reflect()`: skip outcome persistence, print `[DEMO MODE]` banner.
   - `cmd_evaluate()`: skip evaluation persistence and case used_for_calibration writeback.
+  - `cmd_compile()`: **skip `store.save_state(updated)`** — demo mode must not write sample-twin-derived state to real store. Print `[DEMO MODE] Compilation results not persisted.`
   - Other commands (`status`, `dashboard`): read-only, no persistence needed anyway.
 
 **Tests to update:**
@@ -250,44 +251,84 @@ ranking_divergence_pairs: List[str] = Field(
 
 Before LLM interpretation, run keyword matching against scope declaration:
 
+**Scope labels need alias maps.** Current `ScopeDeclaration` values are schema labels (e.g., `simulate_private_conversations`, `live_emotion_state`) that won't match real user queries. Each label needs a keyword alias list:
+
 ```python
+# Alias map: scope label -> list of query-language keywords
+_SCOPE_ALIASES: Dict[str, List[str]] = {
+    # restricted_use_cases
+    "simulate_private_conversations": ["private conversation", "impersonate", "pretend to be", "假装", "模拟对话"],
+    "make_binding_commitments": ["promise", "commit", "guarantee", "承诺", "保证"],
+    "high_confidence_in_unmodeled_domains": ["medical", "legal", "diagnose", "法律", "医疗", "诊断"],
+    # non_modeled_capabilities
+    "live_emotion_state": ["how do I feel", "my emotions", "我现在的情绪", "心情"],
+    "aesthetic_taste_full_fidelity": ["aesthetic", "beauty", "审美"],
+    "intimate_tone_replication": ["intimate", "romantic tone", "亲密"],
+    "trauma_sensitive_responses": ["trauma", "abuse", "创伤", "虐待"],
+    "verbatim_autobiographical_memory": ["remember when I", "recall exactly", "你还记得"],
+    "identity_performance_in_private": ["act as me", "pretend you're me", "替我说"],
+}
+```
+
+This map is defined once in `situation_interpreter.py` and used by the guard. Users/operators can extend it via TwinState in future versions.
+
+```python
+@dataclass
+class ScopeGuardResult:
+    """Structured result from deterministic scope guard."""
+    restricted_hit: bool = False
+    non_modeled_hit: bool = False
+    matched_terms: List[str] = field(default_factory=list)
+
+    @property
+    def triggered(self) -> bool:
+        return self.restricted_hit or self.non_modeled_hit
+
+
 def _deterministic_scope_guard(
     query: str,
     scope: ScopeDeclaration,
-) -> Optional[ScopeStatus]:
-    """Pre-LLM scope check using keyword matching against restricted/non-modeled lists.
+) -> ScopeGuardResult:
+    """Pre-LLM scope check using keyword alias matching.
 
-    Returns ScopeStatus if a match is found, None if no match (proceed to LLM).
+    Returns a structured result distinguishing restricted vs non_modeled hits.
     """
+    result = ScopeGuardResult()
     q_lower = query.lower()
 
-    # Check restricted_use_cases first (strongest rejection signal)
-    for restriction in scope.restricted_use_cases:
-        if restriction.lower() in q_lower:
-            return ScopeStatus.OUT_OF_SCOPE
+    for label in scope.restricted_use_cases:
+        aliases = _SCOPE_ALIASES.get(label, [label.replace("_", " ")])
+        for alias in aliases:
+            if alias.lower() in q_lower:
+                result.restricted_hit = True
+                result.matched_terms.append(f"restricted:{label}={alias}")
+                break
 
-    # Check non_modeled_capabilities
-    for capability in scope.non_modeled_capabilities:
-        if capability.lower() in q_lower:
-            return ScopeStatus.OUT_OF_SCOPE  # tentative; may be overridden below
+    for label in scope.non_modeled_capabilities:
+        aliases = _SCOPE_ALIASES.get(label, [label.replace("_", " ")])
+        for alias in aliases:
+            if alias.lower() in q_lower:
+                result.non_modeled_hit = True
+                result.matched_terms.append(f"non_modeled:{label}={alias}")
+                break
 
-    return None  # No deterministic match; proceed to LLM
+    return result
 ```
 
-**Known limitation:** Naive substring matching can false-positive (e.g., "medical-grade monitor" matches "medical"). Acceptable for v0.1 since false-positive (wrongly refusing) is safer than false-negative (wrongly advising on medical/legal). Phase 5c S1/S2 router will add embedding-based matching to reduce false positives.
+**Known limitation:** Alias-based substring matching can still false-positive (e.g., "medical-grade monitor" matches "medical"). Acceptable for v0.1 since false-positive (wrongly refusing) is safer than false-negative (wrongly advising on medical/legal). Phase 5c S1/S2 router will add embedding-based matching to reduce false positives.
 
 **Integration into `interpret_situation()`:**
 
 Insert before Stage 2 (LLM interpretation):
 ```python
 # Stage 0: Deterministic scope guard (pre-LLM)
-deterministic_scope = _deterministic_scope_guard(query, twin.scope_declaration)
+guard_result = _deterministic_scope_guard(query, twin.scope_declaration)
 ```
 
-Then in Stage 3 (`_apply_routing_policy`), consume this signal:
-- If `deterministic_scope == OUT_OF_SCOPE`: return immediately, skip further processing.
-- If `deterministic_scope is None` but non_modeled was hit AND no modeled activation survived filtering: `OUT_OF_SCOPE`.
-- If `deterministic_scope is None` but non_modeled was hit AND some modeled activation survived: `BORDERLINE`.
+Then in Stage 3 (`_apply_routing_policy`), consume the structured result:
+- If `guard_result.restricted_hit`: return OUT_OF_SCOPE immediately, skip further processing.
+- If `guard_result.non_modeled_hit` AND no modeled activation survived filtering: OUT_OF_SCOPE.
+- If `guard_result.non_modeled_hit` AND some modeled activation survived: BORDERLINE.
 
 **Refined `_apply_routing_policy` check order:**
 1. `restricted_use_cases` deterministic guard → OUT_OF_SCOPE
@@ -309,16 +350,23 @@ return {DomainEnum.WORK: 1.0}, ScopeStatus.OUT_OF_SCOPE, 0.1
 return {}, ScopeStatus.OUT_OF_SCOPE, 0.0
 ```
 
-**Pydantic constraint change required:** `SituationFrame.domain_activation_vector` has `min_length=1` (situation.py:40-43). Relax to `min_length=0` to allow empty activation for OUT_OF_SCOPE frames. Audit downstream consumers:
-- `head_activator.py`: must handle empty activation (skip head activation, return empty assessments)
-- `memory_access_planner.py`: must handle empty activation (return empty plan)
-- `decision_synthesizer.py:32-38`: already handles `scope_status == out_of_scope` with REFUSED response
+**Pydantic constraint changes required:**
 
-Downstream synthesizer handles the REFUSED path before reaching head assessments, so empty activation is safe.
+1. `SituationFrame.domain_activation_vector` (situation.py:40-43): relax `min_length=1` to `min_length=0` to allow empty activation for OUT_OF_SCOPE frames.
+
+2. `RuntimeDecisionTrace.head_assessments` (runtime.py:50): relax `min_length=1` to `min_length=0`. When scope is OUT_OF_SCOPE, `decision_synthesizer.py:32-38` returns REFUSED before any head activation occurs, so the trace is constructed with empty assessments. Current `min_length=1` would cause a Pydantic `ValidationError` on this path.
+
+**Downstream audit for empty activation/assessments:**
+- `head_activator.py`: must handle empty activation (skip head activation, return empty list)
+- `memory_access_planner.py:56`: iterates `frame.domain_activation_vector.items()` — empty dict is safe (zero iterations)
+- `decision_synthesizer.py:32-38`: already handles `scope_status == out_of_scope` with REFUSED response before touching assessments
+- `conflict_arbiter.py`: receives empty assessments list — must return `None` (no conflict) instead of crashing. Verify `arbitrate()` guards on `len(assessments) < 2`.
+
+Downstream synthesizer handles the REFUSED path before reaching head assessments, so empty activation/assessments is safe.
 
 ### 5.3 JsonFileEvidenceStore.query() Minimum Viable
 
-**Problem:** Current `evidence_store.py` `recall()` returns all fragments for a user with no filtering. `RecallQuery` model has `domain_filter`, `target_domain`, `target_evidence_type`, `topic_keywords`, `situation_description` but none are used.
+**Problem:** Current `evidence_store.py` `query()` returns all fragments for a user with no filtering. `RecallQuery` model has `domain_filter`, `target_domain`, `target_evidence_type`, `topic_keywords`, `situation_description` but none are used in the `query()` implementation.
 
 **Fix:**
 
@@ -362,15 +410,31 @@ No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_do
 
 ### 5.4 Planner Constructs Meaningful RecallQuery
 
-**Problem:** `memory_access_planner.py` constructs an empty or trivial `RecallQuery`. The `TODO: LLM fallback when ambiguity > 0.7` remains unaddressed (deferred to #5b).
+**Problem:** `memory_access_planner.py:plan_memory_access()` constructs an empty or trivial `RecallQuery`. It also doesn't receive the original query string — `runner.py:39` only passes `frame, twin, evidence_store`.
 
 **Fix:**
-- Planner extracts filter conditions from `SituationFrame`:
-  - `target_domain`: highest-weight domain from `frame.domain_activation_vector`
-  - `topic_keywords`: extracted from the query string (whitespace split for English; for Chinese queries, use character n-grams or jieba if available, fallback to full query as single keyword)
-  - `domain_filter`: all activated domains (activation > threshold)
-- This makes the planner produce a meaningful query even without LLM assistance.
-- The `TODO` comment is updated to reference Phase 5b.
+
+**Step 1: Add `query` parameter to `plan_memory_access()`**
+```python
+def plan_memory_access(
+    frame: SituationFrame,
+    twin: TwinState,
+    evidence_store: Optional[EvidenceStore] = None,
+    query: str = "",  # NEW: original user query for keyword extraction
+) -> Tuple[MemoryAccessPlan, List[EvidenceFragment]]:
+```
+
+**Step 2: Update `runner.py:run()` to pass query**
+```python
+plan, evidence = plan_memory_access(frame, twin, evidence_store, query=query)
+```
+
+**Step 3: Planner extracts filter conditions**
+- `target_domain`: highest-weight domain from `frame.domain_activation_vector` (empty-safe: skip if no activation)
+- `topic_keywords`: extracted from `query` parameter (whitespace split for English; for Chinese queries, use character n-grams or jieba if available, fallback to full query as single keyword)
+- `domain_filter`: all activated domains with weight > 0.1
+
+**Step 4:** The `TODO: LLM fallback when ambiguity > 0.7` comment is updated to reference Phase 5b.
 
 ### 5.5 Scan/Compile Persists Evidence to Store
 
@@ -386,7 +450,7 @@ No new fields added to `RecallQuery`. Uses existing `topic_keywords`, `target_do
   ```
 - `cmd_compile()` similarly persists the fragments it processes.
 - `JsonFileEvidenceStore` already has `store_fragment()` (port interface at `evidence_store.py:12`).
-- Evidence fragments are stored as individual JSON files under `.../evidence/fragments/{fragment_id}.json`.
+- Evidence fragments are stored by the existing `store_fragment()` method, which uses `content_hash` as filename (dedup semantics preserved).
 
 ## 6. Test Strategy
 
