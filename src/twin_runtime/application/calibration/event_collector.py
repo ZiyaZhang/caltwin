@@ -89,6 +89,7 @@ def collect_event(
         stakes=stakes,
         reversibility=reversibility,
         ground_truth_confidence=ground_truth_confidence,
+        decision_occurred_at=trace.created_at,
     )
 
     return event, candidate
@@ -103,6 +104,7 @@ def collect_manual_case(
     stakes: OrdinalTriLevel = OrdinalTriLevel.MEDIUM,
     reversibility: OrdinalTriLevel = OrdinalTriLevel.MEDIUM,
     ground_truth_confidence: float = 0.9,
+    decision_occurred_at: Optional[datetime] = None,
 ) -> CandidateCalibrationCase:
     """Create a CandidateCalibrationCase from manual user input (life-anchor).
 
@@ -121,6 +123,7 @@ def collect_manual_case(
         stakes=stakes,
         reversibility=reversibility,
         ground_truth_confidence=ground_truth_confidence,
+        decision_occurred_at=decision_occurred_at,
     )
 
 
