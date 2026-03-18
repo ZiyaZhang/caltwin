@@ -41,6 +41,26 @@ where = ["src"]
 [tool.setuptools.package-data]
 twin_runtime = ["resources/skills/*/SKILL.md", "resources/fixtures/*.json"]
 
+[tool.ruff]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E402",  # module-import-not-at-top — intentional lazy imports throughout
+    "E501",  # line-too-long — project uses descriptive long lines
+    "E741",  # ambiguous variable name — false positive on short math vars
+    "F401",  # unused import — some re-exports are intentional
+    "F541",  # f-string-missing-placeholders — some are intentional template strings
+    "F811",  # redefined-while-unused — test files re-import for clarity
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/twin_runtime/runtime/*.py" = ["F401", "F403"]  # backward-compat shims
+"tests/*.py" = ["F401", "F811", "F841"]  # test fixtures may re-import; some assigns are for side effects
+"src/twin_runtime/application/dashboard/generator.py" = ["F841"]  # s used across sections
+"src/twin_runtime/infrastructure/sources/notion_adapter.py" = ["F841"]  # results used for side effect
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
