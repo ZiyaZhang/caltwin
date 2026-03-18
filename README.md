@@ -143,7 +143,7 @@ See [docs/fidelity_report_demo.html](docs/fidelity_report_demo.html) for a sampl
 
 ```bash
 git clone https://github.com/ZiyaZhang/caltwin.git
-cd twin-runtime
+cd caltwin
 pip install -e ".[dev]"
 pytest tests/ -q -m "not requires_llm"
 ```
