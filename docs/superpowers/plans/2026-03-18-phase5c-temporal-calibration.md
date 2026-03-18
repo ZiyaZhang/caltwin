@@ -29,6 +29,7 @@
 | Create | `src/twin_runtime/application/ontology/report_generator.py` | Assemble OntologyReport from clusters |
 | Modify | `src/twin_runtime/cli.py` | Add `drift-report` and `ontology-report` commands; update `cmd_evaluate` for weighted score |
 | Modify | `src/twin_runtime/application/dashboard/cli.py` | Compute raw + weighted scores on-the-fly from evaluation |
+| Modify | `src/twin_runtime/application/dashboard/payload.py` | Add `raw_fidelity_score` + `weighted_fidelity_score` fields |
 | Modify | `src/twin_runtime/application/dashboard/generator.py` | Render raw + weighted fidelity side by side |
 | Modify | `pyproject.toml` | Add `[analysis]` optional dependency for scikit-learn |
 
@@ -352,16 +353,21 @@ detail = EvaluationCaseDetail(
 In `cli.py:cmd_evaluate()`, after saving evaluation:
 ```python
 from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
-score = compute_fidelity_score(evaluation, weighted=True)
-cal_store.save_fidelity_score(score)
-print(f"Weighted CF: {score.choice_fidelity.value:.3f} (raw: {evaluation.choice_similarity:.3f})")
+
+historical_evaluations = cal_store.list_evaluations()
+# Raw score
+raw_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
+# Weighted score
+weighted_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=True)
+cal_store.save_fidelity_score(weighted_score)  # Save weighted as primary
+print(f"Weighted CF: {weighted_score.choice_fidelity.value:.3f} (raw: {raw_score.choice_fidelity.value:.3f})")
 ```
 
-**Dashboard wiring:** Add `application/dashboard/cli.py` and `application/dashboard/generator.py` to the file list. Dashboard computes raw and weighted scores on-the-fly from the saved evaluation:
-- `dashboard_command()` loads the latest `TwinEvaluation` (which has `time_decay_weight` per detail)
-- Calls `compute_fidelity_score(evaluation, weighted=False)` for raw
-- Calls `compute_fidelity_score(evaluation, weighted=True)` for weighted
-- Passes both scores to `DashboardPayload`
+**Dashboard wiring:** Add `application/dashboard/cli.py`, `application/dashboard/payload.py`, `application/dashboard/generator.py`, and `tests/test_dashboard.py` to the file list. Dashboard computes raw and weighted scores on-the-fly:
+- `dashboard_command()` loads latest `TwinEvaluation` + `historical_evaluations`
+- Calls `compute_fidelity_score(evaluation, historical_evaluations=..., weighted=False)` for raw
+- Calls `compute_fidelity_score(evaluation, historical_evaluations=..., weighted=True)` for weighted
+- `DashboardPayload` gets two score fields: `raw_fidelity_score` and `weighted_fidelity_score`
 - `generator.py` renders both side by side (weighted as primary, raw as comparison)
 
 This avoids needing two separate persisted score files. The evaluation carries enough data to reconstruct both.
@@ -599,7 +605,9 @@ def cmd_drift_report(args):
     traces = [trace_store.load_trace(tid) for tid in trace_store.list_traces(limit=10000)]  # Read all traces for drift analysis, not default 50
     # Detect drift
     from twin_runtime.application.calibration.drift_detector import detect_drift
-    report = detect_drift(cases, traces, twin)
+    from datetime import datetime, timezone
+    as_of = datetime.now(timezone.utc)  # Unified timestamp for computation + filename
+    report = detect_drift(cases, traces, twin, as_of=as_of)
 
     # Persist report
     import json
@@ -631,7 +639,9 @@ def cmd_ontology_report(args):
     cal_store = CalibrationStore(str(_STORE_DIR), user_id)
     cases = cal_store.list_cases(used=None)
 
-    report = generate_ontology_report(cases, twin)
+    from datetime import datetime, timezone
+    as_of = datetime.now(timezone.utc)  # Unified timestamp for computation + filename
+    report = generate_ontology_report(cases, twin, as_of=as_of)
 
     # Persist report
     report_dir = _STORE_DIR / user_id / "reports" / "ontology"
