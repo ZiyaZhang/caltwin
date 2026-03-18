@@ -29,6 +29,7 @@ class DefaultLLM:
         schema: Dict[str, Any],
         schema_name: str = "structured_output",
         max_tokens: int = 1024,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         from twin_runtime.infrastructure.llm.client import ask_structured
-        return ask_structured(system, user, schema=schema, schema_name=schema_name, max_tokens=max_tokens)
+        return ask_structured(system, user, schema=schema, schema_name=schema_name, max_tokens=max_tokens, temperature=temperature)

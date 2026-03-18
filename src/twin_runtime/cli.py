@@ -997,11 +997,21 @@ def _print_comparison_table(report):
     best_cf = max(a.cf_score for a in aggs.values())
     for rid, agg in sorted(aggs.items()):
         marker = " *" if agg.cf_score == best_cf else ""
-        unc = f"{agg.mean_uncertainty:.3f}" if agg.mean_uncertainty > 0 else "-"
+        unc = f"{agg.mean_uncertainty:.3f}" if agg.mean_uncertainty is not None else "-"
         print(f"{rid:<15} {agg.cf_score:>10.2%} {agg.correct}/{agg.total:>7} {unc:>12} {agg.mean_latency_ms:>12.0f}{marker}")
 
+    # Abstention report (if any REFUSE scenarios)
+    has_refuse = any(a.refuse_total > 0 for a in aggs.values())
+    if has_refuse:
+        print(f"\n{'Abstention (REFUSE scenarios):':}")
+        for rid, agg in sorted(aggs.items()):
+            if agg.refuse_total > 0:
+                print(f"  {rid:<15} {agg.refuse_correct}/{agg.refuse_total} correctly refused")
+            else:
+                print(f"  {rid:<15} (no REFUSE scenarios scored)")
+
     # Pairwise deltas
-    print(f"\n{'Pairwise Deltas':}")
+    print(f"\n{'Pairwise Deltas (non-REFUSE only):':}")
     for rid, agg in sorted(aggs.items()):
         for key, delta in sorted(agg.pairwise_deltas.items()):
             print(f"  {key}: {delta:+.4f}")
@@ -1009,11 +1019,11 @@ def _print_comparison_table(report):
     # Domain breakdown for best runner
     best_rid = max(aggs, key=lambda k: aggs[k].cf_score)
     if aggs[best_rid].domain_breakdown:
-        print(f"\nDomain Breakdown ({best_rid}):")
+        print(f"\nDomain Breakdown ({best_rid}, non-REFUSE):")
         for d in aggs[best_rid].domain_breakdown:
             print(f"  {d.domain:<20} {d.cf_score:.2%} ({d.correct}/{d.count})")
 
-    print(f"\n* = best baseline | Human test-retest ~0.85")
+    print(f"\nCF excludes REFUSE scenarios | * = best | Human test-retest ~0.85")
 
 
 def main():

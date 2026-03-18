@@ -16,4 +16,5 @@ class LLMPort(Protocol):
         schema: Dict[str, Any],
         schema_name: str = "structured_output",
         max_tokens: int = 1024,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]: ...

@@ -154,6 +154,7 @@ def ask_structured(
     schema_name: str = "structured_output",
     model: str | None = None,
     max_tokens: int = 2048,
+    temperature: float | None = None,
 ) -> Dict[str, Any]:
     """Send a prompt and get structured output via Anthropic tool_use.
 
@@ -175,13 +176,16 @@ def ask_structured(
 {user}"""
 
     try:
-        resp = client.messages.create(
+        kwargs: Dict[str, Any] = dict(
             model=model or _DEFAULT_MODEL,
             max_tokens=max_tokens,
             tools=[tool_def],
             tool_choice={"type": "tool", "name": schema_name},
             messages=[{"role": "user", "content": combined_user}],
         )
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        resp = client.messages.create(**kwargs)
         for block in resp.content:
             if getattr(block, "type", None) == "tool_use":
                 return block.input
@@ -189,4 +193,4 @@ def ask_structured(
     except (anthropic.BadRequestError, anthropic.APIStatusError, RuntimeError) as exc:
         import logging
         logging.getLogger(__name__).warning("tool_use failed (%s), falling back to ask_json", exc)
-        return ask_json(system, user, model=model, max_tokens=max_tokens)
+        return ask_json(system, user, model=model, max_tokens=max_tokens, temperature=temperature)

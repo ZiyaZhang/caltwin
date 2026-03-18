@@ -77,26 +77,35 @@ def _compute_aggregates(
     cf_scores: Dict[str, float] = {}
 
     for runner_id, outputs in all_outputs.items():
-        # For non-twin runners, exclude REFUSE scenarios from CF calculation
-        # (baselines can't refuse — counting them would structurally inflate uplift)
-        is_twin = runner_id == "twin"
-        scorable = [
-            o for o in outputs
-            if is_twin or scenarios_by_id.get(o.scenario_id) is None
-            or scenarios_by_id[o.scenario_id].ground_truth != "REFUSE"
-        ]
-        total = len(scorable)
-        correct = sum(1 for o in scorable if o.is_correct)
+        # Split into non-REFUSE (for CF) and REFUSE (for abstention report)
+        non_refuse = []
+        refuse = []
+        for o in outputs:
+            scenario = scenarios_by_id.get(o.scenario_id)
+            if scenario and scenario.ground_truth == "REFUSE":
+                refuse.append(o)
+            else:
+                non_refuse.append(o)
+
+        # CF is always on the same denominator: non-REFUSE scenarios only
+        total = len(non_refuse)
+        correct = sum(1 for o in non_refuse if o.is_correct)
         cf_score = correct / total if total > 0 else 0.0
         cf_scores[runner_id] = cf_score
 
-        uncertainties = [o.uncertainty for o in outputs if o.uncertainty > 0]
-        mean_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else 0.0
+        # Abstention metrics (separate)
+        refuse_total = len(refuse)
+        refuse_correct = sum(1 for o in refuse if o.is_correct)
+
+        # Uncertainty: use None when no runner populates it (not 0.0)
+        uncertainties = [o.uncertainty for o in outputs if o.uncertainty is not None and o.uncertainty > 0]
+        mean_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else None
 
         latencies = [o.latency_ms for o in outputs if o.latency_ms > 0]
         mean_latency = sum(latencies) / len(latencies) if latencies else 0.0
 
-        domain_breakdown = _compute_domain_breakdown(outputs, scenarios_by_id, exclude_refuse=not is_twin)
+        # Domain breakdown always excludes REFUSE (same basis as CF)
+        domain_breakdown = _compute_domain_breakdown(outputs, scenarios_by_id, exclude_refuse=True)
 
         aggregates[runner_id] = AggregateMetrics(
             runner_id=runner_id,
@@ -105,6 +114,8 @@ def _compute_aggregates(
             mean_latency_ms=mean_latency,
             total=total,
             correct=correct,
+            refuse_total=refuse_total,
+            refuse_correct=refuse_correct,
             domain_breakdown=domain_breakdown,
         )
 

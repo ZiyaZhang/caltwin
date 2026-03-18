@@ -150,13 +150,12 @@ class TestAggregateMetrics:
         assert bd["money"].cf_score == 0.0
         assert bd["money"].count == 1
 
-    def test_refuse_excluded_from_baseline_cf(self):
-        """REFUSE scenarios should not count against baseline runners."""
+    def test_refuse_excluded_from_all_cf(self):
+        """REFUSE scenarios excluded from CF for ALL runners; reported separately."""
         scenarios = {
             "s1": _make_scenario("s1", "work", "A"),
-            "s2": _make_scenario("s2", "work", "REFUSE"),  # out-of-scope
+            "s2": _make_scenario("s2", "work", "REFUSE"),
         }
-        # Vanilla can't refuse, so s2 is always wrong for it
         outputs = {
             "vanilla": [
                 _make_output("vanilla", "s1", "A", True),
@@ -168,12 +167,16 @@ class TestAggregateMetrics:
             ],
         }
         agg = _compute_aggregates(outputs, scenarios)
-        # Vanilla should be 1/1 = 100% (REFUSE excluded)
+        # Both runners: CF on non-REFUSE only (1/1)
         assert agg["vanilla"].cf_score == 1.0
         assert agg["vanilla"].total == 1
-        # Twin should be 2/2 = 100% (REFUSE included)
         assert agg["twin"].cf_score == 1.0
-        assert agg["twin"].total == 2
+        assert agg["twin"].total == 1
+        # Abstention reported separately
+        assert agg["vanilla"].refuse_total == 1
+        assert agg["vanilla"].refuse_correct == 0
+        assert agg["twin"].refuse_total == 1
+        assert agg["twin"].refuse_correct == 1
 
     def test_empty_outputs(self):
         agg = _compute_aggregates({}, {})

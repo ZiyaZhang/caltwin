@@ -69,14 +69,21 @@ class DomainBreakdown(BaseModel):
 
 
 class AggregateMetrics(BaseModel):
-    """Aggregate metrics for a single runner across all scenarios."""
+    """Aggregate metrics for a single runner across all scenarios.
+
+    cf_score is computed on non-REFUSE scenarios only (same denominator
+    for all runners). Abstention performance is reported separately via
+    refuse_correct / refuse_total.
+    """
 
     runner_id: str
     cf_score: float = Field(ge=0.0, le=1.0)
-    mean_uncertainty: float = Field(default=0.0, ge=0.0, le=1.0)
+    mean_uncertainty: Optional[float] = Field(default=None, description="None when no runner populates uncertainty")
     mean_latency_ms: float = Field(default=0.0, ge=0.0)
     total: int = 0
     correct: int = 0
+    refuse_total: int = Field(default=0, description="Number of REFUSE scenarios")
+    refuse_correct: int = Field(default=0, description="Correctly refused/abstained")
     domain_breakdown: List[DomainBreakdown] = Field(default_factory=list)
     pairwise_deltas: Dict[str, float] = Field(default_factory=dict)
 

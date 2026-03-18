@@ -63,7 +63,7 @@ class TwinRunner(BaseRunner):
             uncertainty=trace.uncertainty,
             latency_ms=latency_ms,
             raw_response=trace.final_decision,
-            notes=f"mode={trace.decision_mode.value}",
+            notes=f"mode={trace.decision_mode.value},temperature=default",
         )
 
 
