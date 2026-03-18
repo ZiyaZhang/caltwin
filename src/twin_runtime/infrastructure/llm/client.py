@@ -10,16 +10,24 @@ from typing import Any, Dict
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv()
-
 _DEFAULT_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+
+_client_singleton: anthropic.Anthropic | None = None
+_dotenv_loaded = False
 
 
 def get_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(
-        base_url=os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
-        api_key=os.getenv("ANTHROPIC_API_KEY"),
-    )
+    global _client_singleton, _dotenv_loaded
+    if not _dotenv_loaded:
+        load_dotenv()
+        _dotenv_loaded = True
+    if _client_singleton is None:
+        _client_singleton = anthropic.Anthropic(
+            base_url=os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            max_retries=2,
+        )
+    return _client_singleton
 
 
 def _extract_json(text: str) -> dict:
@@ -39,16 +47,31 @@ def _extract_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    # Find the outermost { ... } block
+    # Find the outermost { ... } block, trying json.loads at each potential closing brace
     start = text.find("{")
     if start == -1:
         raise ValueError(f"No JSON object found in response:\n{text[:300]}")
 
     depth = 0
+    in_string = False
+    escape_next = False
     for i in range(start, len(text)):
-        if text[i] == "{":
+        ch = text[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
             depth += 1
-        elif text[i] == "}":
+        elif ch == "}":
             depth -= 1
             if depth == 0:
                 try:
