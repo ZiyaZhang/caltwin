@@ -11,7 +11,7 @@ pip install twin-runtime
 ### From source (development)
 
 ```bash
-git clone https://github.com/ziya/twin-runtime.git
+git clone https://github.com/ZiyaZhang/caltwin.git
 cd twin-runtime
 pip install -e ".[dev]"
 ```

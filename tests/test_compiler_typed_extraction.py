@@ -153,13 +153,13 @@ class TestReflectionEvidenceFormatting:
             summary="Reflection on career switch",
             domain_hint=DomainEnum.LIFE_PLANNING,
             topic="career switch",
-            insight="I should have left Tencent sooner to pursue AI work",
+            insight="I should have left Company A sooner to pursue AI work",
         )
         prompt = capture_prompt([fragment])
 
         assert "[REFLECTION|life_planning|" in prompt
         assert "Topic: career switch" in prompt
-        assert "I should have left Tencent sooner" in prompt
+        assert "I should have left Company A sooner" in prompt
 
     def test_reflection_insight_truncated_at_200_chars(self):
         """ReflectionEvidence insight is truncated to 200 characters."""
@@ -214,12 +214,12 @@ class TestLegacyFragmentFallback:
             evidence_type=EvidenceType.CONTEXT,
             timestamp=NOW,
             summary="Context about role",
-            raw_excerpt="I am a PM at Tencent working on AI products",
+            raw_excerpt="I am a PM at Company A working on AI products",
             confidence=0.9,
         )
         prompt = capture_prompt([fragment])
 
-        assert "Excerpt: I am a PM at Tencent" in prompt
+        assert "Excerpt: I am a PM at Company A" in prompt
 
     def test_behavior_evidence_uses_fallback_format(self):
         """BehaviorEvidence (no typed format path) uses fallback format."""

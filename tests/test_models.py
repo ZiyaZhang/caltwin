@@ -42,7 +42,7 @@ from twin_runtime.domain.models import (
 class TestTwinStateFromFixture:
     def test_loads_from_fixture(self, sample_twin):
         assert sample_twin.id == "twin-001"
-        assert sample_twin.user_id == "user-ziya"
+        assert sample_twin.user_id == "user-default"
         assert sample_twin.state_version == "v002"
         assert sample_twin.active is True
 

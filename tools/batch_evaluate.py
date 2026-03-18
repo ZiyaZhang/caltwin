@@ -18,7 +18,7 @@ from twin_runtime.application.calibration.fidelity_evaluator import (
 from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
 STORE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "store")
-USER_ID = "user-ziya"
+USER_ID = "user-default"
 FIXTURE = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "sample_twin_state.json")
 
 

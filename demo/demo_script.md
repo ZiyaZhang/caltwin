@@ -25,8 +25,8 @@ When prompted:
 ## Step 2: First Decision — See the Twin Think (60s)
 
 ```bash
-twin-runtime run "I have two offers: a big-company role at Tencent (stable, good pay) vs a startup CTO role (equity, risk, growth). Which should I take?" \
-  -o "Tencent大厂" "创业CTO"
+twin-runtime run "I have two offers: a big-company role (stable, good pay) vs a startup CTO role (equity, risk, growth). Which should I take?" \
+  -o "大厂稳定" "创业CTO"
 ```
 
 **Expected output:**

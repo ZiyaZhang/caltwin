@@ -14,7 +14,7 @@ from twin_runtime.application.calibration.case_manager import promote_candidate
 from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
 STORE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "store")
-USER_ID = "user-ziya"
+USER_ID = "user-default"
 
 ORDINAL_MAP = {"low": OrdinalTriLevel.LOW, "medium": OrdinalTriLevel.MEDIUM, "high": OrdinalTriLevel.HIGH}
 DOMAIN_MAP = {

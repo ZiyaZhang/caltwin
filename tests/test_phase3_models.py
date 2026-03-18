@@ -60,7 +60,7 @@ class TestOutcomeRecord:
         defaults = dict(
             outcome_id="out-1",
             trace_id="trace-1",
-            user_id="user-ziya",
+            user_id="user-default",
             actual_choice="选项A",
             outcome_source=OutcomeSource.USER_CORRECTION,
             prediction_rank=1,
@@ -178,7 +178,7 @@ class TestDetectedBias:
         b = self._make(
             status=DetectedBiasStatus.ACCEPTED,
             reviewed_at=datetime.now(timezone.utc),
-            reviewed_by="user-ziya",
+            reviewed_by="user-default",
         )
         assert b.status == DetectedBiasStatus.ACCEPTED
 

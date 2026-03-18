@@ -93,7 +93,7 @@ class TestCLI:
         store = TwinStore(str(cli_mod._STORE_DIR))
         store.save_state(twin)
 
-        _save_config({"user_id": "user-ziya"})
+        _save_config({"user_id": "user-default"})
         with patch("sys.argv", ["twin-runtime", "status"]):
             main()
         captured = capsys.readouterr()

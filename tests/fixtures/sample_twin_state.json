@@ -1,7 +1,7 @@
 {
   "id": "twin-001",
   "created_at": "2026-03-15T10:00:00Z",
-  "user_id": "user-ziya",
+  "user_id": "user-default",
   "state_version": "v002",
   "shared_decision_core": {
     "risk_tolerance": 0.65,
@@ -29,7 +29,7 @@
     "option_visibility_bias": ["leverage_existing_platform", "ai_first", "low_overhead"],
     "causal_confidence": 0.6,
     "anchor_cases": [
-      "chose_tencent_over_minimax_regretted",
+      "chose_company_a_over_company_b",
       "chose_openclaw_ecosystem_over_standalone",
       "chose_python_for_familiarity"
     ]
@@ -237,7 +237,7 @@
     "fast_variables": ["explore_exploit_balance", "social_proof_dependence"],
     "slow_variables": ["risk_tolerance", "conflict_style", "control_orientation"],
     "irreversible_shifts": ["investment_style_from_active_to_passive"],
-    "major_life_events": ["joined_tencent_2025", "regret_not_staying_at_minimax"]
+    "major_life_events": ["joined_company_a_2025", "regret_not_staying_at_company_b"]
   },
   "active": true,
   "notes": "v002: calibrated from 20-case interview. Key corrections: conflict_style direct→avoidant, added money head, option_visibility_bias updated to ecosystem_leverage, goal_axes refined to match observed patterns (leverage > impact, frontier_access > stability)."

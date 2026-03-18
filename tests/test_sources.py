@@ -150,7 +150,7 @@ class TestOpenClawAdapter:
             mem_dir = Path(tmpdir) / ".claude" / "memory"
             mem_dir.mkdir(parents=True)
             (mem_dir / "user_role.md").write_text(
-                "---\nname: user_role\ntype: user\ndescription: PM at Tencent\n---\nProduct manager."
+                "---\nname: user_role\ntype: user\ndescription: PM at Company A\n---\nProduct manager."
             )
 
             adapter = OpenClawAdapter(tmpdir, home_dir=tmpdir)

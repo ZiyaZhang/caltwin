@@ -99,7 +99,7 @@ Chunk 3: Policy Engine & Retrieval        (depends on Chunk 1 #3 and #4)
 
 ### 3.3 Dashboard Reads Real Store
 
-**Problem:** `application/dashboard/cli.py:5-11` hardcodes `data/store`, `user-ziya`, and `tests/fixtures/...`. The `cli.py:cmd_dashboard()` calls it without passing config. Real users see the demo fixture's dashboard, not their own data.
+**Problem:** `application/dashboard/cli.py:5-11` hardcodes `data/store`, `user-default`, and `tests/fixtures/...`. The `cli.py:cmd_dashboard()` calls it without passing config. Real users see the demo fixture's dashboard, not their own data.
 
 **Fix:**
 - `application/dashboard/cli.py:dashboard_command()` signature changes to accept explicit parameters:

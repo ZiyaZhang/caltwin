@@ -32,8 +32,8 @@ analysis = ["scikit-learn>=1.3"]
 twin-runtime = "twin_runtime.interfaces.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ziya/twin-runtime"
-Repository = "https://github.com/ziya/twin-runtime"
+Homepage = "https://github.com/ZiyaZhang/caltwin"
+Repository = "https://github.com/ZiyaZhang/caltwin"
 
 [tool.setuptools.packages.find]
 where = ["src"]
