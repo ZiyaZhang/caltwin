@@ -310,19 +310,48 @@ class TestWeightedFidelity:
         ...
 ```
 
-- [ ] **Step 3: Extend compute_fidelity_score to use weighted details**
+- [ ] **Step 3: Add time_decay_weight to EvaluationCaseDetail**
 
-`compute_fidelity_score()` currently reads `evaluation.case_details` for raw CF/RF/CQ/TS. Add a `weighted=False` parameter:
-- When `weighted=True`, use `evaluation.decay_params_used` and recompute per-detail weights
-- Return a `TwinFidelityScore` with weighted values
-- CLI `evaluate` output and `dashboard` can pass `weighted=True` to show decayed metrics
+`EvaluationCaseDetail` needs the decay weight stored at evaluation time so `compute_fidelity_score` can use it later without needing the original cases:
 
-This avoids the "computed but invisible" problem — weighted metrics are accessible from the standard product surface.
+In `calibration.py:EvaluationCaseDetail`, add:
+```python
+time_decay_weight: float = Field(default=1.0, description="Decay weight at evaluation time")
+```
 
-- [ ] **Step 4: Run and commit**
+In `fidelity_evaluator.py`, when building each `EvaluationCaseDetail`, set:
+```python
+detail = EvaluationCaseDetail(
+    ...,
+    time_decay_weight=decay_w,
+)
+```
+
+- [ ] **Step 4: Extend compute_fidelity_score with weighted mode**
+
+`compute_fidelity_score(evaluation, *, weighted=False)`:
+- When `weighted=False`: current behavior (uniform averaging)
+- When `weighted=True`: use `detail.time_decay_weight` from each `EvaluationCaseDetail`
+- Returns `TwinFidelityScore` with weighted values
+
+- [ ] **Step 5: Wire weighted score into cmd_evaluate and dashboard**
+
+In `cli.py:cmd_evaluate()`, after saving evaluation:
+```python
+from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
+score = compute_fidelity_score(evaluation, weighted=True)
+cal_store.save_fidelity_score(score)
+print(f"Weighted CF: {score.choice_fidelity.value:.3f} (raw: {evaluation.choice_similarity:.3f})")
+```
+
+In `cli.py:cmd_dashboard()`, pass `weighted=True` context to dashboard_command. Dashboard displays both raw and weighted side by side (or weighted as primary with raw as footnote).
+
+**Default:** CLI evaluate shows weighted as primary metric. Dashboard shows both.
+
+- [ ] **Step 6: Run and commit**
 
 ```bash
-git commit -m "feat: time-decayed weighted fidelity metrics in evaluate_fidelity + compute_fidelity_score"
+git commit -m "feat: time-decayed weighted fidelity — EvaluationCaseDetail carries weight, compute_fidelity_score supports weighted, CLI/dashboard wired"
 ```
 
 ---
@@ -551,8 +580,19 @@ def cmd_drift_report(args):
     # Detect drift
     from twin_runtime.application.calibration.drift_detector import detect_drift
     report = detect_drift(cases, traces, twin)
-    # Save and print
-    ...
+
+    # Persist report
+    import json
+    report_dir = _STORE_DIR / user_id / "reports" / "drift"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = args.output if hasattr(args, 'output') and args.output else str(report_dir / f"{report.as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+    print(f"Drift report saved: {output_path}")
+    print(f"Domain signals: {len(report.domain_signals)}, Axis signals: {len(report.axis_signals)}")
+    for sig in report.domain_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+    for sig in report.axis_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
 ```
 
 - [ ] **Step 3: Add `ontology-report` command**
@@ -564,7 +604,26 @@ def cmd_ontology_report(args):
     except ImportError:
         print("This command requires: pip install twin-runtime[analysis]")
         return
-    ...
+
+    config = _load_config()
+    user_id = config.get("user_id", "default")
+    twin = _require_twin(config)
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    cases = cal_store.list_cases(used=None)
+
+    report = generate_ontology_report(cases, twin)
+
+    # Persist report
+    report_dir = _STORE_DIR / user_id / "reports" / "ontology"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = args.output if hasattr(args, 'output') and args.output else str(report_dir / f"{report.as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+    print(f"Ontology report saved: {output_path}")
+    print(f"Domains analyzed: {report.domains_analyzed}")
+    print(f"Suggestions: {len(report.suggestions)}")
+    for s in report.suggestions:
+        label = s.llm_label or s.deterministic_label
+        print(f"  [{s.parent_domain.value}] {label} (support={s.support_count}, stability={s.stability_score:.2f})")
 ```
 
 - [ ] **Step 4: Register commands in main()**
