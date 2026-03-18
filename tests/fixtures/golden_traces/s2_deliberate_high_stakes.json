@@ -53,6 +53,7 @@
   },
   "expected": {
     "route_path": "s2_deliberate",
-    "boundary_policy": "normal"
+    "boundary_policy": "normal",
+    "expected_top_choice": "Leave"
   }
 }

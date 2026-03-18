@@ -157,3 +157,105 @@ def test_golden_trace(case, tmp_path):
             actual_top = trace.final_decision.split("Recommended: ")[1].split(" (over")[0].strip()
             assert actual_top == expected["expected_top_choice"], \
                 f"Expected top_choice={expected['expected_top_choice']}, got {actual_top}"
+
+
+# ---------------------------------------------------------------------------
+# Aggregate S1/S2 baseline comparison gate
+# ---------------------------------------------------------------------------
+
+def _extract_top_choice(trace) -> str:
+    """Extract top choice from trace.final_decision."""
+    if "Recommended: " in trace.final_decision:
+        return trace.final_decision.split("Recommended: ")[1].split(" (over")[0].strip()
+    return ""
+
+
+def _find_baseline_pairs():
+    """Find golden cases that have a matching _s1_baseline counterpart."""
+    cases = {c["name"]: c for f in sorted(GOLDEN_DIR.glob("*.json"))
+             for c in [json.loads(f.read_text())]}
+    pairs = []
+    for name, case in cases.items():
+        baseline_name = f"{name}_s1_baseline"
+        if baseline_name in cases:
+            pairs.append((case, cases[baseline_name]))
+    return pairs
+
+
+class TestS2VsS1BaselineGate:
+    """Spec gate: S2 accuracy >= S1 accuracy on overlapping case set."""
+
+    def test_s2_at_least_as_good_as_s1(self, tmp_path):
+        """For each S2 case with an S1 baseline, S2 top_choice must match
+        expected at least as often as S1 does."""
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run
+        from twin_runtime.application.orchestrator.models import ExecutionPath
+
+        pairs = _find_baseline_pairs()
+        if not pairs:
+            pytest.skip("No S2/S1 baseline pairs found")
+
+        s2_hits = 0
+        s1_hits = 0
+
+        for s2_case, s1_case in pairs:
+            twin = TwinState(**json.loads(Path(s2_case["twin_fixture"]).read_text()))
+
+            # Run S2 (natural routing)
+            s2_llm = ScriptedLLM(s2_case["llm_script"])
+            s2_trace = run(query=s2_case["query"], option_set=s2_case["option_set"],
+                           twin=twin, llm=s2_llm)
+            s2_top = _extract_top_choice(s2_trace)
+            s2_expected = s2_case["expected"].get("expected_top_choice")
+
+            # Run S1 baseline (forced path)
+            s1_llm = ScriptedLLM(s1_case["llm_script"])
+            s1_trace = run(query=s1_case["query"], option_set=s1_case["option_set"],
+                           twin=twin, llm=s1_llm,
+                           force_path=ExecutionPath.S1_DIRECT)
+            s1_top = _extract_top_choice(s1_trace)
+            s1_expected = s1_case["expected"].get("expected_top_choice")
+
+            if s2_expected and s2_top == s2_expected:
+                s2_hits += 1
+            if s1_expected and s1_top == s1_expected:
+                s1_hits += 1
+
+        assert s2_hits >= s1_hits, \
+            f"S2 accuracy ({s2_hits}) must be >= S1 accuracy ({s1_hits})"
+
+
+# ---------------------------------------------------------------------------
+# S2 micro_calibrate regression
+# ---------------------------------------------------------------------------
+
+class TestS2MicroCalibrate:
+    """Verify deliberation path produces pending_calibration_update when micro_calibrate=True."""
+
+    def test_s2_micro_calibrate_produces_update(self):
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run
+
+        twin = TwinState(**json.loads(
+            Path("tests/fixtures/sample_twin_state.json").read_text()
+        ))
+
+        # Use the S2 high-stakes case script
+        s2_case = json.loads(
+            (GOLDEN_DIR / "s2_deliberate_high_stakes.json").read_text()
+        )
+        llm = ScriptedLLM(s2_case["llm_script"])
+
+        trace = run(
+            query=s2_case["query"],
+            option_set=s2_case["option_set"],
+            twin=twin,
+            llm=llm,
+            micro_calibrate=True,
+        )
+
+        # S2 path with micro_calibrate=True must produce pending_calibration_update
+        assert trace.route_path == "s2_deliberate"
+        assert trace.pending_calibration_update is not None, \
+            "S2 path with micro_calibrate=True must produce pending_calibration_update"
