@@ -27,7 +27,9 @@
 | Create | `src/twin_runtime/application/ontology/clusterer.py` | TF-IDF vectorization + Agglomerative clustering |
 | Create | `src/twin_runtime/application/ontology/stability.py` | Cluster stability assessment |
 | Create | `src/twin_runtime/application/ontology/report_generator.py` | Assemble OntologyReport from clusters |
-| Modify | `src/twin_runtime/cli.py` | Add `drift-report` and `ontology-report` commands |
+| Modify | `src/twin_runtime/cli.py` | Add `drift-report` and `ontology-report` commands; update `cmd_evaluate` for weighted score |
+| Modify | `src/twin_runtime/application/dashboard/cli.py` | Compute raw + weighted scores on-the-fly from evaluation |
+| Modify | `src/twin_runtime/application/dashboard/generator.py` | Render raw + weighted fidelity side by side |
 | Modify | `pyproject.toml` | Add `[analysis]` optional dependency for scikit-learn |
 
 ---
@@ -214,6 +216,11 @@ In `src/twin_runtime/application/calibration/case_manager.py` (or wherever promo
 - Ensure `decision_occurred_at` is copied from CandidateCalibrationCase to CalibrationCase during promotion
 - Check the promotion code and add explicit field mapping if it's doing selective copy
 
+In `src/twin_runtime/application/calibration/event_collector.py:collect_manual_case()`:
+- Add optional `decision_occurred_at: Optional[datetime] = None` parameter
+- Pass through to CandidateCalibrationCase constructor
+- This ensures manually back-filled historical cases get accurate timestamps
+
 - [ ] **Step 5: Run tests and commit**
 
 ```bash
@@ -334,6 +341,12 @@ detail = EvaluationCaseDetail(
 - When `weighted=True`: use `detail.time_decay_weight` from each `EvaluationCaseDetail`
 - Returns `TwinFidelityScore` with weighted values
 
+**Weighted mode rules for each metric:**
+- **CF (Choice Fidelity):** `weighted_avg = sum(choice_score * w) / sum(w)` instead of `sum(choice_score) / N`
+- **RF (Reasoning Fidelity):** same weighted average, only over details with non-None reasoning_score
+- **CQ (Calibration Quality / ECE):** bin assignment unchanged, but within each bin: `avg_conf = sum(conf * w) / sum(w)`, `accuracy = sum(correct * w) / sum(w)`, `bin_ece = |avg_conf - accuracy| * sum(w) / total_w`
+- **TS (Temporal Stability):** uses `evaluation.weighted_choice_similarity` (from current and historical evaluations) instead of raw `choice_similarity`
+
 - [ ] **Step 5: Wire weighted score into cmd_evaluate and dashboard**
 
 In `cli.py:cmd_evaluate()`, after saving evaluation:
@@ -344,7 +357,14 @@ cal_store.save_fidelity_score(score)
 print(f"Weighted CF: {score.choice_fidelity.value:.3f} (raw: {evaluation.choice_similarity:.3f})")
 ```
 
-In `cli.py:cmd_dashboard()`, pass `weighted=True` context to dashboard_command. Dashboard displays both raw and weighted side by side (or weighted as primary with raw as footnote).
+**Dashboard wiring:** Add `application/dashboard/cli.py` and `application/dashboard/generator.py` to the file list. Dashboard computes raw and weighted scores on-the-fly from the saved evaluation:
+- `dashboard_command()` loads the latest `TwinEvaluation` (which has `time_decay_weight` per detail)
+- Calls `compute_fidelity_score(evaluation, weighted=False)` for raw
+- Calls `compute_fidelity_score(evaluation, weighted=True)` for weighted
+- Passes both scores to `DashboardPayload`
+- `generator.py` renders both side by side (weighted as primary, raw as comparison)
+
+This avoids needing two separate persisted score files. The evaluation carries enough data to reconstruct both.
 
 **Default:** CLI evaluate shows weighted as primary metric. Dashboard shows both.
 
