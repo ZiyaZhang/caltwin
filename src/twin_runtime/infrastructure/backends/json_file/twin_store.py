@@ -11,12 +11,22 @@ Storage layout:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from twin_runtime.domain.models.twin_state import TwinState
+
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_safe_id(value: str, label: str = "ID") -> str:
+    """Validate that an ID is safe for filesystem use (no path traversal)."""
+    if not value or not _SAFE_ID_RE.match(value):
+        raise ValueError(f"Unsafe {label} for filesystem use: {value!r}")
+    return value
 
 
 class TwinStore:
@@ -27,6 +37,7 @@ class TwinStore:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _user_dir(self, user_id: str) -> Path:
+        _validate_safe_id(user_id, "user_id")
         d = self.base_dir / user_id
         d.mkdir(parents=True, exist_ok=True)
         return d
@@ -98,6 +109,7 @@ class TwinStore:
 
     def delete_user(self, user_id: str) -> None:
         """Delete all data for a user."""
+        _validate_safe_id(user_id, "user_id")
         user_dir = self.base_dir / user_id
         if user_dir.exists():
             shutil.rmtree(user_dir)

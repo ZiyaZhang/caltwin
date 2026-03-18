@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from twin_runtime.domain.models.primitives import (
     DependencyScope,
@@ -41,6 +41,15 @@ class SituationFrame(BaseModel):
         description="Map of domain -> activation weight (0-1).",
     )
     situation_feature_vector: SituationFeatureVector
+
+    @model_validator(mode="after")
+    def _validate_activation_weights(self):
+        for domain, weight in self.domain_activation_vector.items():
+            if not (0.0 <= weight <= 1.0):
+                raise ValueError(
+                    f"domain_activation_vector[{domain.value}]={weight} is out of range [0.0, 1.0]"
+                )
+        return self
     ambiguity_score: float = confidence_field()
     clarification_questions: List[str] = Field(default_factory=list)
     scope_status: ScopeStatus

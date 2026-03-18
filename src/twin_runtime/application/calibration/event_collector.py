@@ -35,9 +35,20 @@ def collect_event(
     """
     now = datetime.now(timezone.utc)
 
-    # Did the twin get it right?
+    # Did the twin get it right? Use containment with length guard to avoid
+    # false positives (e.g., "B" matching "Buy a house") while allowing
+    # "Option A" to match "Recommended: Option A (over Option B)".
     twin_top_choice = trace.final_decision
-    agreed = user_actual_choice in twin_top_choice
+    norm_user = user_actual_choice.lower().strip()
+    norm_twin = twin_top_choice.lower().strip()
+    if norm_user == norm_twin:
+        agreed = True
+    elif norm_user in norm_twin or norm_twin in norm_user:
+        shorter = min(len(norm_user), len(norm_twin))
+        longer = max(len(norm_user), len(norm_twin))
+        agreed = longer > 0 and shorter / longer > 0.3
+    else:
+        agreed = False
 
     event = RuntimeEvent(
         event_id=str(uuid.uuid4()),

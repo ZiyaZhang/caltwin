@@ -236,7 +236,8 @@ def evaluate_fidelity(
                 raise
             error_count += 1
             failed_case_ids.append(case.case_id)
-            print(f"  ERROR on case {case.case_id}: {e}")
+            import logging
+            logging.getLogger(__name__).warning("ERROR on case %s: %s", case.case_id, e)
             continue  # Skip - don't add 0.0 to scores
 
         # Compute time-decay weight for this case

@@ -123,20 +123,20 @@ class TestCaseManager:
         assert candidate.promoted_to_calibration_case is False
 
     def test_reject_choice_not_in_options(self):
-        candidate = CandidateCalibrationCase(
-            candidate_id=str(uuid.uuid4()),
-            created_at=datetime.now(timezone.utc),
-            source_type=CandidateSourceType.RUNTIME_TRACE,
-            domain_label=DomainEnum.WORK,
-            observed_context="Enough context for the quality gate",
-            option_set=["A", "B"],
-            observed_choice="C",
-            stakes=OrdinalTriLevel.MEDIUM,
-            reversibility=OrdinalTriLevel.MEDIUM,
-            ground_truth_confidence=0.9,
-        )
-        case = promote_candidate(candidate)
-        assert case is None
+        import pytest
+        with pytest.raises(Exception):  # Pydantic validates observed_choice in option_set
+            CandidateCalibrationCase(
+                candidate_id=str(uuid.uuid4()),
+                created_at=datetime.now(timezone.utc),
+                source_type=CandidateSourceType.RUNTIME_TRACE,
+                domain_label=DomainEnum.WORK,
+                observed_context="Enough context for the quality gate",
+                option_set=["A", "B"],
+                observed_choice="C",
+                stakes=OrdinalTriLevel.MEDIUM,
+                reversibility=OrdinalTriLevel.MEDIUM,
+                ground_truth_confidence=0.9,
+            )
 
 
 class TestStateUpdater:

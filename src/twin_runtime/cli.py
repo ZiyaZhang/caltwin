@@ -44,6 +44,8 @@ def _load_config() -> dict:
 def _save_config(config: dict) -> None:
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     _CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    # Restrict permissions to owner-only (sensitive data like API keys)
+    os.chmod(str(_CONFIG_FILE), 0o600)
 
 
 class TwinNotFoundError(Exception):

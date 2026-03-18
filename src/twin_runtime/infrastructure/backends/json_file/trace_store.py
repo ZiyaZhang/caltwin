@@ -1,10 +1,19 @@
 """JSON file implementation of TraceStore protocol."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import List
 
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
+
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_safe_id(value: str, label: str = "ID") -> str:
+    if not value or not _SAFE_ID_RE.match(value):
+        raise ValueError(f"Unsafe {label} for filesystem use: {value!r}")
+    return value
 
 
 class JsonFileTraceStore:
@@ -15,11 +24,13 @@ class JsonFileTraceStore:
         self.base.mkdir(parents=True, exist_ok=True)
 
     def save_trace(self, trace: RuntimeDecisionTrace) -> str:
+        _validate_safe_id(trace.trace_id, "trace_id")
         path = self.base / f"{trace.trace_id}.json"
         path.write_text(trace.model_dump_json(indent=2))
         return trace.trace_id
 
     def load_trace(self, trace_id: str) -> RuntimeDecisionTrace:
+        _validate_safe_id(trace_id, "trace_id")
         path = self.base / f"{trace_id}.json"
         return RuntimeDecisionTrace.model_validate_json(path.read_text())
 

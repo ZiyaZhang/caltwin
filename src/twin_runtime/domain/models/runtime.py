@@ -14,6 +14,7 @@ from twin_runtime.domain.models.primitives import (
     MergeStrategy,
     RuntimeEventType,
     confidence_field,
+    uncertainty_field,
 )
 
 
@@ -55,7 +56,7 @@ class RuntimeDecisionTrace(BaseModel):
     conflict_report_id: Optional[str] = None
     final_decision: str
     decision_mode: DecisionMode
-    uncertainty: float = confidence_field()
+    uncertainty: float = uncertainty_field(description="0.0 = certain, 1.0 = maximally uncertain")
     refusal_or_degrade_reason: Optional[str] = None
     output_text: Optional[str] = None
     memory_access_plan: Optional[Any] = Field(

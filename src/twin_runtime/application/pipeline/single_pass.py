@@ -50,20 +50,11 @@ def execute_from_frame_once(
         from dataclasses import asdict
         trace.scope_guard_result = asdict(guard_result)
 
-    # Refusal reason code: only assign scope/guard-derived reasons here.
+    # Refusal reason code: delegate to shared helper in orchestrator.
     # LOW_RELIABILITY is handled by orchestrator's explicit post-execution rule.
-    # Do NOT default unclassified refusals to LOW_RELIABILITY — orchestrator owns that.
     if trace.refusal_reason_code is None:
-        if trace.decision_mode == DecisionMode.REFUSED:
-            if guard_result and getattr(guard_result, 'restricted_hit', False):
-                trace.refusal_reason_code = "POLICY_RESTRICTED"
-            elif guard_result and getattr(guard_result, 'non_modeled_hit', False):
-                trace.refusal_reason_code = "NON_MODELED"
-            elif frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
-                trace.refusal_reason_code = "OUT_OF_SCOPE"
-            # No else fallback — orchestrator handles remaining classification
-        elif trace.decision_mode == DecisionMode.DEGRADED:
-            trace.refusal_reason_code = "DEGRADED_SCOPE"
+        from twin_runtime.application.orchestrator.runtime_orchestrator import _assign_refusal_reason
+        _assign_refusal_reason(trace, frame, guard_result)
 
     if micro_calibrate:
         from twin_runtime.application.calibration.micro_calibration import recalibrate_confidence
