@@ -183,9 +183,10 @@ class DriftReport(BaseModel):
 
 For each `(domain, task_type)` pair with sufficient cases:
 1. Split cases into recent window (last N days) and historical window
-2. Build choice distribution: `P(choice | domain, task_type)` for each window
-3. Compute **Jensen-Shannon Divergence** between the two distributions
-4. If JSD > threshold (e.g., 0.15) → flag as drift signal
+2. **Sample sufficiency gate:** `min_recent_support = 3`, `min_historical_support = 5`. If either window has fewer cases, skip this pair (insufficient data for reliable drift signal).
+3. Build choice distribution: `P(choice | domain, task_type)` for each window
+4. Compute **Jensen-Shannon Divergence** between the two distributions
+5. If JSD > threshold (e.g., 0.15) → flag as drift signal
 
 **Why (domain, task_type)?** Choice labels are only comparable within the same task type. "Stay vs Leave" (career decisions) is incomparable with "Refactor vs Ship" (tech decisions), even if both are in the `work` domain. Domain-level summary is derived by aggregating task_type-level signals (e.g., "3 of 5 work task_types show drift").
 
@@ -193,11 +194,18 @@ For each `(domain, task_type)` pair with sufficient cases:
 
 **Data source:** Offline analysis of `RuntimeDecisionTrace` loaded from TraceStore (not TwinEvaluation). Each trace contains `head_assessments` with `utility_decomposition` per axis per domain. This is the only place axis-level scores are stored.
 
-For each goal_axis appearing across traces:
-1. Load traces from TraceStore, group by time window
-2. Compute weighted mean utility score per axis in recent vs historical window
-3. Compute **absolute mean delta**
-4. If delta > threshold (e.g., 0.1) → flag as drift signal
+**Trace inclusion policy:**
+- Only include traces where `head_assessments` is non-empty
+- Exclude traces with `decision_mode == REFUSED` (weak/absent evidence state, not representative of real preferences)
+- Include `DEGRADED` traces (they ran the pipeline and produced assessments, just with caveats)
+- Include `DIRECT` and `CLARIFIED` traces
+
+For each goal_axis appearing across included traces:
+1. Load traces from TraceStore, apply inclusion policy, group by time window
+2. **Sample sufficiency gate:** same thresholds as domain drift (`min_recent_support = 3`, `min_historical_support = 5` traces per axis)
+3. Compute weighted mean utility score per axis in recent vs historical window
+4. Compute **absolute mean delta**
+5. If delta > threshold (e.g., 0.1) → flag as drift signal
 
 Note: `TwinEvaluation` and `EvaluationCaseDetail` do not store per-axis utility scores. Axis drift detection must go through traces, not evaluation summaries.
 
