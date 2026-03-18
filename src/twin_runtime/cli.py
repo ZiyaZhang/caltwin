@@ -310,8 +310,18 @@ def cmd_evaluate(args):
         case.used_for_calibration = True
         cal_store.save_case(case)
 
-    print(f"\nChoice similarity (CF): {evaluation.choice_similarity:.3f}")
+    # Compute and save fidelity scores (raw + weighted)
+    from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
+    historical_evaluations = [e for e in cal_store.list_evaluations() if e.evaluation_id != evaluation.evaluation_id]
+    raw_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
+    weighted_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=True)
+    cal_store.save_fidelity_score(weighted_score)
+
+    print(f"\nWeighted CF: {weighted_score.choice_fidelity.value:.3f} (raw: {raw_score.choice_fidelity.value:.3f})")
+    print(f"Weighted CQ: {weighted_score.calibration_quality.value:.3f} (raw: {raw_score.calibration_quality.value:.3f})")
     print(f"Domain reliability: {evaluation.domain_reliability}")
+    if evaluation.weighted_domain_reliability:
+        print(f"Weighted domain reliability: {evaluation.weighted_domain_reliability}")
     if evaluation.failed_case_count > 0:
         print(f"Failed cases (excluded): {evaluation.failed_case_count}")
     if evaluation.abstention_accuracy is not None:

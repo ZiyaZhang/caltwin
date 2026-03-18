@@ -43,10 +43,20 @@ def dashboard_command(
         except (FileNotFoundError, KeyError):
             pass
 
+    # Compute raw fidelity score for comparison (weighted is the saved primary)
+    raw_fidelity_score = None
+    try:
+        from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
+        historical_evaluations = [e for e in evals if e.evaluation_id != evaluation.evaluation_id]
+        raw_fidelity_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
+    except Exception:
+        pass  # Pre-5c evaluations may not support weighted mode
+
     biases = cal_store.list_detected_biases()
     payload = DashboardPayload(
         fidelity_score=latest_score, evaluation=evaluation,
         twin=twin, detected_biases=biases, historical_scores=scores,
+        raw_fidelity_score=raw_fidelity_score,
     )
     html = generate_dashboard(payload)
     Path(output).write_text(html)

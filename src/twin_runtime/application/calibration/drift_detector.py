@@ -75,18 +75,26 @@ def _detect_domain_drift(
         if len(all_choices) < 2:
             continue
 
-        r_counts = Counter(c.actual_choice for c in recent)
-        h_counts = Counter(c.actual_choice for c in historical)
-        r_total = sum(r_counts.values())
-        h_total = sum(h_counts.values())
-        r_probs = [(r_counts.get(ch, 0) + 1e-10) / (r_total + 1e-10 * len(all_choices)) for ch in all_choices]
-        h_probs = [(h_counts.get(ch, 0) + 1e-10) / (h_total + 1e-10 * len(all_choices)) for ch in all_choices]
+        # Decay-weighted choice distributions
+        from twin_runtime.application.calibration.time_decay import calibration_decay_weight, case_age_days
+        r_weighted: Dict[str, float] = {}
+        for c in recent:
+            w = calibration_decay_weight(case_age_days(c, as_of))
+            r_weighted[c.actual_choice] = r_weighted.get(c.actual_choice, 0.0) + w
+        h_weighted: Dict[str, float] = {}
+        for c in historical:
+            w = calibration_decay_weight(case_age_days(c, as_of))
+            h_weighted[c.actual_choice] = h_weighted.get(c.actual_choice, 0.0) + w
+        r_total = sum(r_weighted.values()) + 1e-10 * len(all_choices)
+        h_total = sum(h_weighted.values()) + 1e-10 * len(all_choices)
+        r_probs = [(r_weighted.get(ch, 0) + 1e-10) / r_total for ch in all_choices]
+        h_probs = [(h_weighted.get(ch, 0) + 1e-10) / h_total for ch in all_choices]
 
         jsd = _jsd(r_probs, h_probs)
         if jsd > jsd_threshold:
             # Determine direction
-            r_top = max(r_counts, key=r_counts.get) if r_counts else "?"
-            h_top = max(h_counts, key=h_counts.get) if h_counts else "?"
+            r_top = max(r_weighted, key=r_weighted.get) if r_weighted else "?"
+            h_top = max(h_weighted, key=h_weighted.get) if h_weighted else "?"
             direction = f"{domain}/{task_type}: shifted from '{h_top}' to '{r_top}'"
             signals.append(DriftSignal(
                 dimension=f"{domain}/{task_type}",
@@ -123,7 +131,8 @@ def _detect_axis_drift(
         and len(t.head_assessments) > 0
     ]
 
-    # Collect per-axis scores with timestamps
+    # Collect per-axis scores with timestamps and decay weights
+    from twin_runtime.application.calibration.time_decay import time_decay_weight, EVIDENCE_HALF_LIFE, EVIDENCE_FLOOR
     axis_scores: Dict[str, List[Tuple[datetime, float]]] = {}
     for t in valid_traces:
         ts = t.created_at
@@ -135,14 +144,25 @@ def _detect_axis_drift(
                     axis_scores.setdefault(axis, []).append((ts, float(value)))
 
     for axis, scores in axis_scores.items():
-        recent = [v for ts, v in scores if ts >= recent_cutoff]
-        historical = [v for ts, v in scores if historical_cutoff <= ts < recent_cutoff]
+        recent_data = [(ts, v) for ts, v in scores if ts >= recent_cutoff]
+        historical_data = [(ts, v) for ts, v in scores if historical_cutoff <= ts < recent_cutoff]
 
-        if len(recent) < min_recent or len(historical) < min_historical:
+        if len(recent_data) < min_recent or len(historical_data) < min_historical:
             continue
 
-        r_mean = sum(recent) / len(recent)
-        h_mean = sum(historical) / len(historical)
+        # Decay-weighted means
+        def _weighted_mean(data):
+            total_w = 0.0
+            total_v = 0.0
+            for ts, v in data:
+                age = max(0.0, (as_of - ts).total_seconds() / 86400.0)
+                w = time_decay_weight(age, EVIDENCE_HALF_LIFE, EVIDENCE_FLOOR)
+                total_w += w
+                total_v += v * w
+            return total_v / total_w if total_w > 0 else 0.0
+
+        r_mean = _weighted_mean(recent_data)
+        h_mean = _weighted_mean(historical_data)
         delta = abs(r_mean - h_mean)
 
         if delta > delta_threshold:
@@ -152,7 +172,7 @@ def _detect_axis_drift(
                 dimension_type="axis",
                 direction=f"{axis}: {direction_word} from {h_mean:.2f} to {r_mean:.2f}",
                 magnitude=min(1.0, delta),
-                confidence=min(1.0, (len(recent) + len(historical)) / 20),
+                confidence=min(1.0, (len(recent_data) + len(historical_data)) / 20),
                 recent_window=(recent_cutoff, as_of),
                 historical_window=(historical_cutoff, recent_cutoff),
                 metric_used="weighted_mean_delta",
