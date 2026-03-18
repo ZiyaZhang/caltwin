@@ -90,6 +90,21 @@ class TestGenerateComparisonReport:
         assert "vanilla" in html
         assert "twin" in html
 
+    def test_has_abstention_section(self):
+        report = _make_report()
+        # Add refuse data
+        report.aggregates["twin"].refuse_total = 2
+        report.aggregates["twin"].refuse_correct = 2
+        report.aggregates["vanilla"].refuse_total = 2
+        report.aggregates["vanilla"].refuse_correct = 0
+        html = generate_comparison_report(report)
+        assert "Abstention" in html
+        assert "REFUSE" in html
+
+    def test_cf_scope_noted(self):
+        html = generate_comparison_report(_make_report())
+        assert "non-REFUSE" in html
+
     def test_empty_report(self):
         report = ComparisonReport()
         html = generate_comparison_report(report)

@@ -97,8 +97,8 @@ def _compute_aggregates(
         refuse_total = len(refuse)
         refuse_correct = sum(1 for o in refuse if o.is_correct)
 
-        # Uncertainty: use None when no runner populates it (not 0.0)
-        uncertainties = [o.uncertainty for o in outputs if o.uncertainty is not None and o.uncertainty > 0]
+        # Uncertainty: None = runner doesn't report; 0.0 = fully confident (valid)
+        uncertainties = [o.uncertainty for o in outputs if o.uncertainty is not None]
         mean_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else None
 
         latencies = [o.latency_ms for o in outputs if o.latency_ms > 0]

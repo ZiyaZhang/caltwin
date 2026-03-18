@@ -66,6 +66,7 @@ def generate_comparison_report(report: "ComparisonReport") -> str:
     body = (
         _section_summary_cards(report)
         + _section_bar_chart(report)
+        + _section_abstention(report)
         + _section_scenario_table(report)
         + _section_domain_breakdown(report)
     )
@@ -101,9 +102,9 @@ def _section_summary_cards(report: "ComparisonReport") -> str:
         cards.append(f"""<div class="{cls}">
   <h3>{html.escape(rid)}</h3>
   <div class="value">{agg.cf_score:.0%}</div>
-  <div class="detail">{agg.correct}/{agg.total} correct &middot; {agg.mean_latency_ms:.0f}ms avg</div>
+  <div class="detail">{agg.correct}/{agg.total} correct (excl. REFUSE) &middot; {agg.mean_latency_ms:.0f}ms avg</div>
 </div>""")
-    return f'<h2>Summary</h2>\n<div class="cards">{"".join(cards)}</div>'
+    return f'<h2>Summary (non-REFUSE scenarios)</h2>\n<div class="cards">{"".join(cards)}</div>'
 
 
 def _section_bar_chart(report: "ComparisonReport") -> str:
@@ -120,7 +121,36 @@ def _section_bar_chart(report: "ComparisonReport") -> str:
     <div class="baseline-label">Human ~0.85</div>
   </div>
 </div>""")
-    return f'<h2>CF Score Comparison</h2>\n<div class="bar-chart">{"".join(rows)}</div>'
+    return f'<h2>CF Score Comparison (non-REFUSE)</h2>\n<div class="bar-chart">{"".join(rows)}</div>'
+
+
+def _section_abstention(report: "ComparisonReport") -> str:
+    """Abstention / REFUSE scenario performance, reported separately from CF."""
+    if not report.aggregates:
+        return ""
+    has_refuse = any(a.refuse_total > 0 for a in report.aggregates.values())
+    if not has_refuse:
+        return ""
+
+    rows = []
+    for rid, agg in sorted(report.aggregates.items()):
+        if agg.refuse_total > 0:
+            pct = agg.refuse_correct / agg.refuse_total * 100
+            rows.append(
+                f'<tr><td>{html.escape(rid)}</td>'
+                f'<td>{agg.refuse_correct}/{agg.refuse_total}</td>'
+                f'<td>{pct:.0f}%</td></tr>'
+            )
+        else:
+            rows.append(
+                f'<tr><td>{html.escape(rid)}</td><td>-</td><td>-</td></tr>'
+            )
+    return f"""<h2>Abstention (REFUSE scenarios)</h2>
+<p class="meta">REFUSE scenarios are excluded from CF to keep the denominator uniform across runners.</p>
+<table>
+<thead><tr><th>Runner</th><th>Correct Refusals</th><th>Rate</th></tr></thead>
+<tbody>{"".join(rows)}</tbody>
+</table>"""
 
 
 def _section_scenario_table(report: "ComparisonReport") -> str:

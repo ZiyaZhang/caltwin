@@ -53,7 +53,7 @@ class RunnerOutput(BaseModel):
     chosen: str
     is_correct: bool
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    uncertainty: float = Field(default=0.0, ge=0.0, le=1.0)
+    uncertainty: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="None = runner doesn't report uncertainty")
     latency_ms: float = Field(default=0.0, ge=0.0)
     raw_response: str = Field(default="")
     notes: str = Field(default="")
