@@ -204,15 +204,27 @@ class TestCaseAgeDays:
         assert abs(age - 17) < 0.1
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [ ] **Step 4: Wire decision_occurred_at into data production chain**
+
+In `src/twin_runtime/application/calibration/event_collector.py`, when creating `CandidateCalibrationCase`:
+- Set `decision_occurred_at = trace.created_at` (the trace timestamp IS when the decision happened)
+- This ensures promoted cases have accurate temporal data
+
+In `src/twin_runtime/application/calibration/case_manager.py` (or wherever promotion happens):
+- Ensure `decision_occurred_at` is copied from CandidateCalibrationCase to CalibrationCase during promotion
+- Check the promotion code and add explicit field mapping if it's doing selective copy
+
+- [ ] **Step 5: Run tests and commit**
 
 ```bash
 python3 -m pytest tests/test_time_decay.py -v
 python3 -m pytest tests/ -q -m "not requires_llm" --tb=short
 git add src/twin_runtime/application/calibration/time_decay.py \
   src/twin_runtime/domain/models/calibration.py \
+  src/twin_runtime/application/calibration/event_collector.py \
+  src/twin_runtime/application/calibration/case_manager.py \
   tests/test_time_decay.py
-git commit -m "feat: time decay function + decision_occurred_at + weighted metric fields"
+git commit -m "feat: time decay function + decision_occurred_at wired through event_collector and promotion"
 ```
 
 ---
@@ -227,34 +239,57 @@ git commit -m "feat: time decay function + decision_occurred_at + weighted metri
 
 - [ ] **Step 1: Add weighted computation to evaluate_fidelity**
 
-After the existing raw aggregation, compute weighted versions:
+**Do NOT use parallel list slicing** — reasoning_scores is already filtered (Nones skipped), so indices don't align with cases. Instead, collect per-case records during the main loop:
+
 ```python
 from twin_runtime.application.calibration.time_decay import (
     calibration_decay_weight, case_age_days,
     CALIBRATION_HALF_LIFE, CALIBRATION_FLOOR,
 )
+from dataclasses import dataclass
 
-# In evaluate_fidelity, after raw avg_choice computation:
+@dataclass
+class _CaseRecord:
+    choice_score: float
+    reasoning_score: Optional[float]
+    domain: str
+    weight: float
+
+# Inside the per-case loop, after computing result:
 as_of = datetime.now(timezone.utc)
-weights = [calibration_decay_weight(case_age_days(cases[i], as_of))
-           for i in range(len(choice_scores))]
-total_w = sum(weights)
+case_records: list[_CaseRecord] = []
+
+# ... in the loop body, after appending to choice_scores:
+    decay_w = calibration_decay_weight(case_age_days(case, as_of))
+    case_records.append(_CaseRecord(
+        choice_score=result.choice_score,
+        reasoning_score=result.reasoning_score,
+        domain=case.domain_label.value,
+        weight=decay_w,
+    ))
+
+# After the loop, compute weighted metrics from case_records:
+total_w = sum(r.weight for r in case_records)
 if total_w > 0:
-    weighted_choice = sum(s * w for s, w in zip(choice_scores, weights)) / total_w
+    weighted_choice = sum(r.choice_score * r.weight for r in case_records) / total_w
+    reasoning_records = [r for r in case_records if r.reasoning_score is not None]
+    reasoning_w = sum(r.weight for r in reasoning_records)
     weighted_reasoning = (
-        sum(s * w for s, w in zip(reasoning_scores, weights[:len(reasoning_scores)])) /
-        sum(weights[:len(reasoning_scores)])
-    ) if reasoning_scores else None
+        sum(r.reasoning_score * r.weight for r in reasoning_records) / reasoning_w
+    ) if reasoning_w > 0 else None
     weighted_domain_rel = {}
-    for d, scores_list in domain_scores.items():
-        d_weights = [w for w, case in zip(weights, cases) if case.domain_label.value == d]
-        if d_weights:
-            weighted_domain_rel[d] = sum(s * w for s, w in zip(scores_list, d_weights)) / sum(d_weights)
+    for d in set(r.domain for r in case_records):
+        d_records = [r for r in case_records if r.domain == d]
+        d_w = sum(r.weight for r in d_records)
+        if d_w > 0:
+            weighted_domain_rel[d] = sum(r.choice_score * r.weight for r in d_records) / d_w
 else:
     weighted_choice = avg_choice
     weighted_reasoning = avg_reasoning
     weighted_domain_rel = domain_reliability
 ```
+
+This avoids the index-alignment bug entirely — each record carries its own weight.
 
 Pass to TwinEvaluation constructor:
 ```python
@@ -275,10 +310,19 @@ class TestWeightedFidelity:
         ...
 ```
 
-- [ ] **Step 3: Run and commit**
+- [ ] **Step 3: Extend compute_fidelity_score to use weighted details**
+
+`compute_fidelity_score()` currently reads `evaluation.case_details` for raw CF/RF/CQ/TS. Add a `weighted=False` parameter:
+- When `weighted=True`, use `evaluation.decay_params_used` and recompute per-detail weights
+- Return a `TwinFidelityScore` with weighted values
+- CLI `evaluate` output and `dashboard` can pass `weighted=True` to show decayed metrics
+
+This avoids the "computed but invisible" problem — weighted metrics are accessible from the standard product surface.
+
+- [ ] **Step 4: Run and commit**
 
 ```bash
-git commit -m "feat: time-decayed weighted fidelity metrics in evaluate_fidelity"
+git commit -m "feat: time-decayed weighted fidelity metrics in evaluate_fidelity + compute_fidelity_score"
 ```
 
 ---
@@ -389,10 +433,20 @@ def cluster_cases(
     except ImportError:
         raise ImportError("Shadow ontology requires: pip install twin-runtime[analysis]")
 
-    # Custom tokenizer for mixed CN/EN
+    # Custom tokenizer: word unigrams/bigrams + CJK char bigrams
+    import re
+    def mixed_tokenizer(text):
+        """Tokenize mixed CN/EN: word tokens + CJK character bigrams."""
+        # Word tokens (EN words + structural tokens like stakes:high)
+        words = re.findall(r'[a-zA-Z_:]+|\d+', text)
+        # CJK character bigrams
+        cjk = [c for c in text if '\u4e00' <= c <= '\u9fff']
+        bigrams = [cjk[i] + cjk[i+1] for i in range(len(cjk) - 1)]
+        return words + bigrams
+
     vectorizer = TfidfVectorizer(
-        analyzer='char_wb',  # character n-grams with word boundaries
-        ngram_range=(2, 4),
+        tokenizer=mixed_tokenizer,
+        ngram_range=(1, 2),  # word unigrams and bigrams
         max_features=500,
         sublinear_tf=True,
     )
@@ -493,7 +547,7 @@ def cmd_drift_report(args):
     cal_store = CalibrationStore(str(_STORE_DIR), user_id)
     trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
     cases = cal_store.list_cases(used=None)
-    traces = [trace_store.load_trace(tid) for tid in trace_store.list_traces()]
+    traces = [trace_store.load_trace(tid) for tid in trace_store.list_traces(limit=10000)]  # Read all traces for drift analysis, not default 50
     # Detect drift
     from twin_runtime.application.calibration.drift_detector import detect_drift
     report = detect_drift(cases, traces, twin)
@@ -530,8 +584,10 @@ git commit -m "feat: drift-report and ontology-report CLI commands"
 - [ ] **10 golden traces unchanged**: `python3 -m pytest tests/test_golden_traces.py -v`
 - [ ] **Time decay**: `python3 -m pytest tests/test_time_decay.py -v`
 - [ ] **Drift detection**: `python3 -m pytest tests/test_drift_detector.py -v`
-- [ ] **Ontology**: `python3 -m pytest tests/test_ontology.py -v`
+- [ ] **Ontology** (requires sklearn): `python3 -m pytest tests/test_ontology.py -v`
 - [ ] **Runtime impact zero**: no changes to runner, orchestrator, route_decision, deliberation, single_pass
+
+**Ontology test strategy:** `tests/test_ontology.py` must use `pytest.importorskip("sklearn")` at module level. Tests skip gracefully when scikit-learn is not installed. CI can optionally install `[analysis]` extra for full coverage. This matches the "optional dependency" contract — tests don't fail, they skip.
 
 ---
 
