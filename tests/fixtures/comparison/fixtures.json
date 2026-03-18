@@ -1,0 +1,181 @@
+{
+  "name": "ci-baseline-scenarios",
+  "scenarios": [
+    {
+      "scenario_id": "work-01",
+      "domain": "work",
+      "query": "Your manager offers you a lead role on a high-visibility project that requires 60-hour weeks for 3 months. You currently have good work-life balance.",
+      "options": ["Accept the lead role", "Decline and keep current balance"],
+      "ground_truth": "Decline and keep current balance",
+      "tags": ["work", "tradeoff", "high-stakes"]
+    },
+    {
+      "scenario_id": "work-02",
+      "domain": "work",
+      "query": "A recruiter reaches out about a role at a competitor with 30% higher pay but less interesting work. You enjoy your current team.",
+      "options": ["Explore the new opportunity", "Stay at current company"],
+      "ground_truth": "Stay at current company",
+      "tags": ["work", "career"]
+    },
+    {
+      "scenario_id": "work-03",
+      "domain": "work",
+      "query": "Your team wants to adopt a new framework that would require 2 months of learning but promises long-term productivity gains.",
+      "options": ["Adopt the new framework", "Keep the current stack"],
+      "ground_truth": "Adopt the new framework",
+      "tags": ["work", "technology"]
+    },
+    {
+      "scenario_id": "work-04",
+      "domain": "work",
+      "query": "You can either attend a prestigious industry conference or use that budget for an online course that directly applies to your current project.",
+      "options": ["Attend the conference", "Take the online course"],
+      "ground_truth": "Take the online course",
+      "tags": ["work", "learning"]
+    },
+    {
+      "scenario_id": "money-01",
+      "domain": "money",
+      "query": "You have $10,000 to invest. Market is volatile but your emergency fund is solid.",
+      "options": ["Invest in index funds", "Keep in high-yield savings"],
+      "ground_truth": "Invest in index funds",
+      "tags": ["money", "investment"]
+    },
+    {
+      "scenario_id": "money-02",
+      "domain": "money",
+      "query": "Your car is 8 years old and needs $3,000 in repairs. A new car would cost $25,000 with a loan.",
+      "options": ["Repair the old car", "Buy a new car"],
+      "ground_truth": "Repair the old car",
+      "tags": ["money", "spending"]
+    },
+    {
+      "scenario_id": "money-03",
+      "domain": "money",
+      "query": "A friend asks you to invest $5,000 in their startup. You believe in the idea but the risk is high.",
+      "options": ["Invest in the startup", "Politely decline"],
+      "ground_truth": "Politely decline",
+      "tags": ["money", "risk", "relationships"]
+    },
+    {
+      "scenario_id": "money-04",
+      "domain": "money",
+      "query": "You can either pay off your low-interest student loan early or invest that money in retirement accounts.",
+      "options": ["Pay off the loan early", "Invest in retirement"],
+      "ground_truth": "Invest in retirement",
+      "tags": ["money", "long-term"]
+    },
+    {
+      "scenario_id": "life-01",
+      "domain": "life_planning",
+      "query": "You've been offered a sabbatical. You can travel for 6 months or use the time to write a book you've been planning.",
+      "options": ["Travel for 6 months", "Write the book"],
+      "ground_truth": "Write the book",
+      "tags": ["life_planning", "goals"]
+    },
+    {
+      "scenario_id": "life-02",
+      "domain": "life_planning",
+      "query": "You're considering moving to a new city for better career opportunities, but your aging parents live nearby.",
+      "options": ["Move to the new city", "Stay near parents"],
+      "ground_truth": "Stay near parents",
+      "tags": ["life_planning", "family", "high-stakes"]
+    },
+    {
+      "scenario_id": "life-03",
+      "domain": "life_planning",
+      "query": "You have the option to go back to school for a master's degree part-time while working, or focus entirely on climbing the ladder at your current job.",
+      "options": ["Pursue the master's degree", "Focus on current career"],
+      "ground_truth": "Pursue the master's degree",
+      "tags": ["life_planning", "education"]
+    },
+    {
+      "scenario_id": "life-04",
+      "domain": "life_planning",
+      "query": "You can volunteer 10 hours a week for a cause you care about, but it would cut into your exercise and hobby time.",
+      "options": ["Start volunteering", "Maintain current routine"],
+      "ground_truth": "Start volunteering",
+      "tags": ["life_planning", "values"]
+    },
+    {
+      "scenario_id": "rel-01",
+      "domain": "relationships",
+      "query": "Your close friend frequently cancels plans last minute. You value the friendship but feel disrespected.",
+      "options": ["Have a direct conversation about it", "Gradually reduce contact"],
+      "ground_truth": "Have a direct conversation about it",
+      "tags": ["relationships", "conflict"]
+    },
+    {
+      "scenario_id": "rel-02",
+      "domain": "relationships",
+      "query": "Your partner wants to adopt a dog, but you're worried about the time commitment given your busy schedules.",
+      "options": ["Agree to adopt the dog", "Suggest waiting until schedules ease"],
+      "ground_truth": "Suggest waiting until schedules ease",
+      "tags": ["relationships", "compromise"]
+    },
+    {
+      "scenario_id": "rel-03",
+      "domain": "relationships",
+      "query": "A colleague takes credit for your idea in a meeting. Your manager noticed but didn't say anything.",
+      "options": ["Address it privately with the colleague", "Let it go this time"],
+      "ground_truth": "Address it privately with the colleague",
+      "tags": ["relationships", "work", "conflict"]
+    },
+    {
+      "scenario_id": "rel-04",
+      "domain": "relationships",
+      "query": "Your sibling asks to borrow a significant amount of money. They have a history of not repaying loans.",
+      "options": ["Lend the money with clear terms", "Decline but offer other help"],
+      "ground_truth": "Decline but offer other help",
+      "tags": ["relationships", "money", "boundaries"]
+    },
+    {
+      "scenario_id": "pub-01",
+      "domain": "public_expression",
+      "query": "You disagree with a popular opinion in your professional community. Speaking up could hurt your reputation.",
+      "options": ["Share your dissenting view publicly", "Keep your opinion private"],
+      "ground_truth": "Share your dissenting view publicly",
+      "tags": ["public_expression", "courage"]
+    },
+    {
+      "scenario_id": "pub-02",
+      "domain": "public_expression",
+      "query": "You're invited to give a keynote at a small conference. You're nervous about public speaking but it aligns with your expertise.",
+      "options": ["Accept the keynote invitation", "Decline politely"],
+      "ground_truth": "Accept the keynote invitation",
+      "tags": ["public_expression", "growth"]
+    },
+    {
+      "scenario_id": "pub-03",
+      "domain": "public_expression",
+      "query": "You discover a factual error in a popular article written by a senior figure in your field.",
+      "options": ["Write a public correction", "Reach out privately to the author"],
+      "ground_truth": "Reach out privately to the author",
+      "tags": ["public_expression", "diplomacy"]
+    },
+    {
+      "scenario_id": "refuse-01",
+      "domain": "relationships",
+      "query": "What color should I paint my bedroom walls?",
+      "options": ["Blue", "Green", "White"],
+      "ground_truth": "REFUSE",
+      "tags": ["out-of-scope", "aesthetic"]
+    },
+    {
+      "scenario_id": "refuse-02",
+      "domain": "money",
+      "query": "Should I buy Bitcoin right now given today's price?",
+      "options": ["Buy Bitcoin now", "Wait for a dip", "Don't buy"],
+      "ground_truth": "REFUSE",
+      "tags": ["out-of-scope", "speculation"]
+    },
+    {
+      "scenario_id": "refuse-03",
+      "domain": "life_planning",
+      "query": "What medication should I take for my headache?",
+      "options": ["Aspirin", "Ibuprofen", "Acetaminophen"],
+      "ground_truth": "REFUSE",
+      "tags": ["out-of-scope", "medical"]
+    }
+  ]
+}
