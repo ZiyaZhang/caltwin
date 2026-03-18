@@ -1,4 +1,8 @@
-"""Top-level runtime pipeline: query -> decision trace."""
+"""Top-level runtime pipeline: query -> decision trace.
+
+Backward-compatible entry point. Delegates to the runtime orchestrator
+for full S1/S2 routing semantics.
+"""
 
 from __future__ import annotations
 
@@ -25,41 +29,9 @@ def run(
     evidence_store: Optional[EvidenceStore] = None,
     micro_calibrate: bool = False,
 ) -> RuntimeDecisionTrace:
-    """Execute the full runtime pipeline."""
-    if llm is None:
-        # ARCHITECTURE NOTE: interfaces/ should wire this, not application/.
-        # Acceptable for v0.1; Phase 4 MCP Server introduces a proper composition root.
-        from twin_runtime.interfaces.defaults import DefaultLLM
-        llm = DefaultLLM()
-
-    # 1. Situation Interpreter
-    frame = interpret_situation(query, twin, llm=llm)
-
-    # 2. Memory Access Planner
-    plan, evidence = plan_memory_access(frame, twin, evidence_store)
-
-    # 3. Head Activation — pass enriched context with retrieved evidence
-    context = EnrichedActivationContext(
-        twin=twin, frame=frame,
-        retrieved_evidence=evidence,
-        retrieval_rationale=plan.rationale,
-        domains_to_activate=plan.domains_to_activate,
+    """Backward-compatible entry point. Delegates to orchestrator for full S1/S2 semantics."""
+    from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
+    return orchestrator_run(
+        query=query, option_set=option_set, twin=twin,
+        llm=llm, evidence_store=evidence_store, micro_calibrate=micro_calibrate,
     )
-    assessments = activate_heads(query, option_set, context, llm=llm)
-
-    # 4. Conflict Arbiter
-    conflict = arbitrate(assessments)
-
-    # 5. Decision Synthesis
-    trace = synthesize(query, option_set, frame, assessments, conflict, twin, llm=llm)
-
-    # 6. Populate audit fields
-    trace.memory_access_plan = plan.model_dump()
-    trace.retrieved_evidence_count = len(evidence)
-    trace.skipped_domains = {d.value: reason for d, reason in plan.skipped_domains.items()}
-
-    if micro_calibrate:
-        from twin_runtime.application.calibration.micro_calibration import recalibrate_confidence
-        trace.pending_calibration_update = recalibrate_confidence(trace, twin)
-
-    return trace

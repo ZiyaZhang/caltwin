@@ -49,9 +49,9 @@ class TestColdStart:
             ContextEvidence(
                 source_type="test", source_id="t-2",
                 occurred_at=now, valid_from=now,
-                summary="Product manager at Tencent",
+                summary="Product manager at Company A",
                 confidence=0.9, user_id="user-new",
-                context_category="role", description="PM trainee at Tencent",
+                context_category="role", description="PM trainee at Company A",
             ),
         ]
         twin = compiler._create_initial(user_id="user-new", fragments=fragments)

@@ -94,8 +94,8 @@ class GmailAdapter(SourceAdapter):
                 q=query,
                 maxResults=self._max_results,
             ).execute()
-        except Exception as e:
-            print(f"Gmail search failed: {e}")
+        except Exception as exc:
+            print(f"Gmail search failed: {exc}")
             return []
 
         messages = results.get("messages", [])
@@ -105,7 +105,7 @@ class GmailAdapter(SourceAdapter):
                 fragment = self._process_message(service, msg_ref["id"])
                 if fragment:
                     fragments.append(fragment)
-            except Exception as e:
+            except Exception:
                 continue
 
         return fragments

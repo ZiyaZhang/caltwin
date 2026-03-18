@@ -1,0 +1,36 @@
+{
+  "name": "degrade_non_modeled_partial",
+  "description": "Query hits non_modeled alias (aesthetic) but has partial domain activation. Route: S1 + FORCE_DEGRADE. Result: DEGRADED with NON_MODELED_PARTIAL reason.",
+  "query": "What aesthetic style suits my apartment renovation?",
+  "option_set": ["Modern minimalist", "Traditional"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"public_expression": 0.7},
+      "reversibility": "medium",
+      "stakes": "medium",
+      "uncertainty_type": "missing_info",
+      "controllability": "high",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.75,
+      "clarification_questions": ["What is your budget?"]
+    },
+    "head_assess_public_expression": {
+      "option_ranking": ["Modern minimalist", "Traditional"],
+      "utility_decomposition": {"expression": 0.6},
+      "confidence": 0.4,
+      "used_core_variables": [],
+      "used_evidence_types": []
+    },
+    "synthesize": "I'd lean modern minimalist but I'm not confident here."
+  },
+  "expected": {
+    "decision_mode": "degraded",
+    "refusal_reason_code": "NON_MODELED_PARTIAL",
+    "route_path": "s1_direct",
+    "boundary_policy": "force_degrade",
+    "expected_top_choice": "Modern minimalist"
+  }
+}

@@ -64,6 +64,7 @@ def promote_candidate(
         reversibility=candidate.reversibility,
         time_pressure=candidate.time_pressure,
         confidence_of_ground_truth=candidate.ground_truth_confidence,
+        decision_occurred_at=candidate.decision_occurred_at,
         used_for_calibration=False,
     )
 

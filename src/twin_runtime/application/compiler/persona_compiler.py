@@ -16,7 +16,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from twin_runtime.domain.models.primitives import DomainEnum
+from twin_runtime.domain.models.primitives import ConflictStyle, DomainEnum
 from twin_runtime.domain.models.twin_state import TwinState
 from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 from twin_runtime.domain.evidence.types import (
@@ -25,6 +25,25 @@ from twin_runtime.domain.evidence.types import (
 from twin_runtime.infrastructure.sources.registry import SourceRegistry
 from twin_runtime.infrastructure.llm.client import ask_json
 from twin_runtime.domain.ports.llm_port import LLMPort
+
+
+def _merge_goal_axes(existing: List[str], new: List[str], max_axes: int = 8) -> List[str]:
+    """Merge new goal axes into existing, preserving order.
+
+    Existing axes always keep their position and are never truncated.
+    New axes that aren't duplicates are appended, up to the cap.
+    If existing already exceeds max_axes, no new axes are added.
+    """
+    seen = set(existing)
+    merged = list(existing)
+    slots = max(0, max_axes - len(existing))
+    added = 0
+    for axis in new:
+        if axis not in seen and added < slots:
+            merged.append(axis)
+            seen.add(axis)
+            added += 1
+    return merged
 
 
 class EvidenceGraph:
@@ -67,7 +86,7 @@ Output a JSON object:
   "core_parameters": {
     "risk_tolerance": 0.0-1.0 or null,
     "ambiguity_tolerance": 0.0-1.0 or null,
-    "conflict_style": "direct"|"avoidant"|"collaborative"|"competitive"|"accommodating" or null,
+    "conflict_style": "direct"|"avoidant"|"collaborative"|"competitive"|"accommodating"|"delayed"|"adaptive" or null,
     "social_proof_dependence": 0.0-1.0 or null
   },
   "causal_beliefs": {
@@ -220,7 +239,10 @@ class PersonaCompiler:
             self.evidence_graph.add_edge("compiled", "shared_decision_core.risk_tolerance")
 
         if core_params.get("conflict_style") is not None:
-            updated.shared_decision_core.conflict_style = core_params["conflict_style"]
+            try:
+                updated.shared_decision_core.conflict_style = ConflictStyle(core_params["conflict_style"])
+            except ValueError:
+                pass  # LLM returned unknown value, keep existing
             self.evidence_graph.add_edge("compiled", "shared_decision_core.conflict_style")
 
         if core_params.get("ambiguity_tolerance") is not None:
@@ -246,11 +268,7 @@ class PersonaCompiler:
         for domain_str, signals in domain_signals.items():
             head = head_map.get(domain_str)
             if head and signals.get("goal_axes"):
-                existing_axes = set(head.goal_axes)
-                new_axes = set(signals["goal_axes"])
-                # Only add new ones, don't remove existing
-                combined = list(existing_axes | new_axes)
-                head.goal_axes = combined[:8]  # Cap at 8
+                head.goal_axes = _merge_goal_axes(head.goal_axes, signals["goal_axes"])
 
         # Bump version and evidence count
         updated.shared_decision_core.evidence_count += len(fragments)

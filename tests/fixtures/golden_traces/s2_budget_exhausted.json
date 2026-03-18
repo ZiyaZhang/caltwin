@@ -1,0 +1,58 @@
+{
+  "name": "s2_budget_exhausted",
+  "description": "S2 deliberation hits max_iterations but produces a usable (non-refused) result",
+  "query": "Should I invest in crypto or index funds?",
+  "option_set": ["Crypto", "Index funds"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"money": 0.7, "work": 0.3},
+      "reversibility": "medium",
+      "stakes": "high",
+      "uncertainty_type": "outcome_uncertainty",
+      "controllability": "medium",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.65,
+      "clarification_questions": []
+    },
+    "round_0": {
+      "head_assess_money": {
+        "option_ranking": ["Index funds", "Crypto"],
+        "utility_decomposition": {"roi": 0.6, "risk": 0.7},
+        "confidence": 0.6,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_work": {
+        "option_ranking": ["Index funds", "Crypto"],
+        "utility_decomposition": {"time_efficiency": 0.8},
+        "confidence": 0.65,
+        "used_core_variables": [],
+        "used_evidence_types": []
+      }
+    },
+    "round_1": {
+      "head_assess_money": {
+        "option_ranking": ["Index funds", "Crypto"],
+        "utility_decomposition": {"roi": 0.65, "risk": 0.75},
+        "confidence": 0.7,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_work": {
+        "option_ranking": ["Index funds", "Crypto"],
+        "utility_decomposition": {"time_efficiency": 0.85},
+        "confidence": 0.72,
+        "used_core_variables": [],
+        "used_evidence_types": []
+      }
+    },
+    "synthesize": "Index funds align better with a passive, long-term approach."
+  },
+  "expected": {
+    "route_path": "s2_deliberate",
+    "expected_top_choice": "Index funds"
+  }
+}

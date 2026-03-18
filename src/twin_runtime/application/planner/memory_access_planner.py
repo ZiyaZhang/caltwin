@@ -9,7 +9,7 @@ executes them against the EvidenceStore, and returns retrieved evidence.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from twin_runtime.domain.evidence.base import EvidenceFragment, EvidenceType
 from twin_runtime.domain.models.planner import MemoryAccessPlan
@@ -67,10 +67,28 @@ def _compute_domain_gating(
     return active_domains, skipped
 
 
+def _extract_keywords(query: str) -> List[str]:
+    """Extract keywords from query. Whitespace split + Chinese bigrams."""
+    if not query:
+        return []
+    words = query.split()
+    keywords = [w for w in words if len(w) > 2]  # Skip very short words
+    # Chinese bigrams: detect CJK characters
+    cjk_chars = [c for c in query if '\u4e00' <= c <= '\u9fff']
+    for i in range(len(cjk_chars) - 1):
+        keywords.append(cjk_chars[i] + cjk_chars[i + 1])
+    return keywords[:10]  # Cap at 10
+
+
 def plan_memory_access(
     frame: SituationFrame,
     twin: TwinState,
     evidence_store: Optional[EvidenceStore] = None,
+    query: str = "",
+    *,
+    seen_content_hashes: Optional[Set[str]] = None,
+    round_index: int = 0,
+    previous_conflict: Optional[Any] = None,
 ) -> Tuple[MemoryAccessPlan, List[EvidenceFragment]]:
     """Plan and execute evidence retrieval for a decision.
 
@@ -84,7 +102,16 @@ def plan_memory_access(
     freshness = "balanced"
     disabled: List[EvidenceType] = []
 
+    # Deliberation: increase budget when previous conflict requires more evidence
+    if round_index > 0 and previous_conflict is not None:
+        if getattr(previous_conflict, "requires_more_evidence", False):
+            budget = budget * 2
+            rationale_parts.append(f"Round {round_index}: doubled budget due to unresolved conflict")
+
     user_id = twin.user_id
+
+    # --- Keyword extraction from query ---
+    topic_keywords = _extract_keywords(query) if query else []
 
     # --- Domain gating ---
     domains_to_activate, skipped_domains = _compute_domain_gating(frame, twin)
@@ -97,6 +124,10 @@ def plan_memory_access(
     # active_domains from raw frame (includes unmodeled), separate from gating result
     all_activated = [d for d, w in frame.domain_activation_vector.items() if w > 0.1]
     twin_domain_set = {h.domain for h in twin.domain_heads}
+    # Domain filter for queries: all activated domains
+    activated_domain_filter = all_activated if all_activated else None
+    # Highest activation domain
+    top_domain = max(frame.domain_activation_vector, key=frame.domain_activation_vector.get) if frame.domain_activation_vector else None
 
     # Rule 1: High stakes + low uncertainty -> verify past decisions
     if stakes == OrdinalTriLevel.HIGH and ambiguity < 0.3:
@@ -104,6 +135,8 @@ def plan_memory_access(
             query_type="decisions_about",
             user_id=user_id,
             decision_topic=frame.frame_id,
+            target_domain=top_domain,
+            topic_keywords=topic_keywords or None,
             limit=_DEFAULT_PER_QUERY,
         ))
         rationale_parts.append("High stakes + low ambiguity: checking past decision consistency")
@@ -113,6 +146,8 @@ def plan_memory_access(
         queries.append(RecallQuery(
             query_type="preference_on_axis",
             user_id=user_id,
+            domain_filter=activated_domain_filter,
+            topic_keywords=topic_keywords or None,
             limit=_DEFAULT_PER_QUERY,
         ))
         rationale_parts.append("High ambiguity: retrieving preference evidence")
@@ -124,11 +159,14 @@ def plan_memory_access(
                 query_type="by_domain",
                 user_id=user_id,
                 target_domain=domain,
+                topic_keywords=topic_keywords or None,
                 limit=_DEFAULT_PER_QUERY,
             ))
         queries.append(RecallQuery(
             query_type="state_trajectory",
             user_id=user_id,
+            domain_filter=activated_domain_filter,
+            topic_keywords=topic_keywords or None,
             limit=_DEFAULT_PER_QUERY,
         ))
         rationale_parts.append(f"Multi-domain ({len(all_activated)}): per-domain + cross-domain trajectory")
@@ -140,6 +178,7 @@ def plan_memory_access(
                 query_type="by_evidence_type",
                 user_id=user_id,
                 target_evidence_type=EvidenceType.REFLECTION,
+                topic_keywords=topic_keywords or None,
                 limit=_DEFAULT_PER_QUERY,
             ))
             disabled.append(EvidenceType.BEHAVIOR)
@@ -156,6 +195,8 @@ def plan_memory_access(
         queries.append(RecallQuery(
             query_type="by_timeline",
             user_id=user_id,
+            domain_filter=activated_domain_filter,
+            topic_keywords=topic_keywords or None,
             limit=_DEFAULT_PER_QUERY,
         ))
         rationale_parts.append("Low routing confidence: expanded budget + timeline context")
@@ -189,6 +230,10 @@ def plan_memory_access(
             all_evidence.extend(results)
         except Exception:
             logger.warning("EvidenceStore.query() failed for %s, skipping", query.query_type, exc_info=True)
+
+    # Deliberation: filter out already-seen evidence
+    if round_index > 0 and seen_content_hashes:
+        all_evidence = [e for e in all_evidence if e.content_hash not in seen_content_hashes]
 
     # Enforce budget
     if len(all_evidence) > budget:

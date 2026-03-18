@@ -30,6 +30,10 @@ _CONFIG_DIR = Path.home() / ".twin-runtime"
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
 _STORE_DIR = _CONFIG_DIR / "store"
 
+_twin_parent = argparse.ArgumentParser(add_help=False)
+_twin_parent.add_argument("--demo", action="store_true",
+    help="Use bundled sample twin (no data persisted)")
+
 
 def _load_config() -> dict:
     if _CONFIG_FILE.exists():
@@ -47,29 +51,31 @@ class TwinNotFoundError(Exception):
     pass
 
 
-def _get_twin(config: dict) -> TwinState:
-    """Load or create TwinState. Raises TwinNotFoundError if unavailable."""
+def _get_twin(config: dict, demo: bool = False) -> TwinState:
+    """Load or create TwinState. Raises TwinNotFoundError if unavailable.
+
+    If demo=True, load from bundled sample twin fixture (no persistence).
+    """
+    if demo:
+        import importlib.resources as pkg_resources
+        ref = pkg_resources.files("twin_runtime") / "resources" / "fixtures" / "sample_twin_state.json"
+        twin = TwinState.model_validate_json(ref.read_text())
+        print("[DEMO MODE] Using sample twin. No data will be persisted.")
+        return twin
+
     user_id = config.get("user_id", "default")
     store = TwinStore(str(_STORE_DIR))
 
     if store.has_current(user_id):
-        return store.load(user_id)
-
-    # Check for fixture
-    fixture = config.get("fixture_path")
-    if fixture and Path(fixture).exists():
-        with open(fixture) as f:
-            twin = TwinState(**json.load(f))
-        store.save(twin)
-        return twin
+        return store.load_state(user_id)
 
     raise TwinNotFoundError("No twin state found. Run 'twin-runtime init' first.")
 
 
-def _require_twin(config: dict) -> TwinState:
+def _require_twin(config: dict, demo: bool = False) -> TwinState:
     """Get twin or print friendly error and exit. For CLI commands that need twin."""
     try:
-        return _get_twin(config)
+        return _get_twin(config, demo=demo)
     except TwinNotFoundError as e:
         print(str(e))
         sys.exit(1)
@@ -141,7 +147,7 @@ def cmd_init(args):
             try:
                 with open(config["fixture_path"]) as f:
                     twin = TwinState(**json.load(f))
-                store.save(twin)
+                store.save_state(twin)
                 print(f"Twin state initialized: {twin.state_version}")
             except Exception as e:
                 print(f"Warning: could not load fixture: {e}")
@@ -153,24 +159,30 @@ def cmd_run(args):
     """Run decision pipeline."""
     config = _load_config()
     _apply_env(config)
+    demo = getattr(args, 'demo', False)
 
-    from twin_runtime.application.pipeline.runner import run as run_pipeline
+    from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
 
-    twin = _require_twin(config)
-    trace = run_pipeline(
+    twin = _require_twin(config, demo=demo)
+    user_id = config.get("user_id", "default")
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    trace = orchestrator_run(
         query=args.query,
         option_set=args.options,
         twin=twin,
+        evidence_store=evidence_store,
+        max_deliberation_rounds=getattr(args, 'max_rounds', 2),
     )
 
-    # Persist trace for reflect --trace-id linkage
-    user_id = config.get("user_id", "default")
-    try:
-        from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
-        trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
-        trace_store.save_trace(trace)
-    except (IOError, OSError) as e:
-        print(f"  Warning: could not persist trace: {e}", file=sys.stderr)
+    # Persist trace for reflect --trace-id linkage (skip in demo mode)
+    if not demo:
+        try:
+            from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+            trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+            trace_store.save_trace(trace)
+        except (IOError, OSError) as e:
+            print(f"  Warning: could not persist trace: {e}", file=sys.stderr)
 
     if args.json:
         print(trace.model_dump_json(indent=2))
@@ -179,6 +191,11 @@ def cmd_run(args):
         print(f"Decision: {trace.final_decision}")
         print(f"Mode: {trace.decision_mode.value} | Uncertainty: {trace.uncertainty:.2f}")
         print(f"Domains: {[d.value for d in trace.activated_domains]}")
+        print(f"Route: {trace.route_path} | Policy: {trace.boundary_policy}")
+        if trace.refusal_reason_code:
+            print(f"Refusal: {trace.refusal_reason_code}")
+        if trace.deliberation_rounds > 0:
+            print(f"Deliberation: {trace.deliberation_rounds} rounds | Terminated: {trace.terminated_by}")
         if trace.output_text:
             print(f"\n{trace.output_text}")
         print(f"{'='*60}")
@@ -209,6 +226,19 @@ def cmd_scan(args):
     for etype, frags in sorted(by_type.items()):
         print(f"  {etype}: {len(frags)}")
 
+    # Persist evidence fragments to store
+    user_id = config.get("user_id", "default")
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    persisted = 0
+    for fragment in fragments:
+        try:
+            evidence_store.store_fragment(fragment)
+            persisted += 1
+        except Exception as e:
+            print(f"  Warning: could not persist fragment: {e}", file=sys.stderr)
+    print(f"Persisted {persisted}/{len(fragments)} evidence fragments to store.")
+
     if args.verbose:
         for f in fragments[:20]:
             print(f"\n  [{f.evidence_type.value}] {f.summary}")
@@ -231,12 +261,25 @@ def cmd_compile(args):
 
     # Save updated state
     store = TwinStore(str(_STORE_DIR))
-    store.save(updated)
+    store.save_state(updated)
+
+    # Persist evidence fragments to store
+    user_id = config.get("user_id", "default")
+    from twin_runtime.infrastructure.backends.json_file.evidence_store import JsonFileEvidenceStore
+    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    persisted = 0
+    for fragment in fragments:
+        try:
+            evidence_store.store_fragment(fragment)
+            persisted += 1
+        except Exception as e:
+            print(f"  Warning: could not persist fragment: {e}", file=sys.stderr)
 
     print(f"Compiled {len(fragments)} fragments")
     print(f"Twin state: {twin.state_version} → {updated.state_version}")
     print(f"Evidence graph: {len(graph.edges)} edges")
     print(f"Evidence count: {twin.shared_decision_core.evidence_count} → {updated.shared_decision_core.evidence_count}")
+    print(f"Persisted {persisted}/{len(fragments)} evidence fragments to store.")
 
 
 def cmd_evaluate(args):
@@ -261,15 +304,36 @@ def cmd_evaluate(args):
     evaluation = evaluate_fidelity(cases, twin)
 
     cal_store.save_evaluation(evaluation)
-    print(f"\nChoice similarity: {evaluation.choice_similarity:.3f}")
+
+    # Mark cases as used for calibration
+    for case in cases:
+        case.used_for_calibration = True
+        cal_store.save_case(case)
+
+    # Compute and save fidelity scores (raw + weighted)
+    from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
+    historical_evaluations = [e for e in cal_store.list_evaluations() if e.evaluation_id != evaluation.evaluation_id]
+    raw_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
+    weighted_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=True)
+    cal_store.save_fidelity_score(weighted_score)
+
+    print(f"\nWeighted CF: {weighted_score.choice_fidelity.value:.3f} (raw: {raw_score.choice_fidelity.value:.3f})")
+    print(f"Weighted CQ: {weighted_score.calibration_quality.value:.3f} (raw: {raw_score.calibration_quality.value:.3f})")
     print(f"Domain reliability: {evaluation.domain_reliability}")
+    if evaluation.weighted_domain_reliability:
+        print(f"Weighted domain reliability: {evaluation.weighted_domain_reliability}")
+    if evaluation.failed_case_count > 0:
+        print(f"Failed cases (excluded): {evaluation.failed_case_count}")
+    if evaluation.abstention_accuracy is not None:
+        print(f"Abstention accuracy: {evaluation.abstention_accuracy:.3f} ({evaluation.abstention_case_count} OOS cases)")
     print(f"Evaluation ID: {evaluation.evaluation_id}")
 
 
 def cmd_status(args):
     """Show twin state summary."""
     config = _load_config()
-    twin = _require_twin(config)
+    demo = getattr(args, 'demo', False)
+    twin = _require_twin(config, demo=demo)
 
     print(f"Twin: {twin.id}")
     print(f"User: {twin.user_id}")
@@ -343,8 +407,10 @@ def cmd_config(args):
 
 def cmd_dashboard(args):
     """Generate HTML fidelity dashboard."""
+    config = _load_config()
+    user_id = config.get("user_id", "default")
     from twin_runtime.application.dashboard.cli import dashboard_command
-    dashboard_command(output=args.output, open_browser=args.open)
+    dashboard_command(store_dir=str(_STORE_DIR), user_id=user_id, output=args.output, open_browser=args.open)
 
 
 def cmd_reflect(args):
@@ -354,6 +420,11 @@ def cmd_reflect(args):
     from twin_runtime.domain.models.primitives import OutcomeSource, DomainEnum, uncertainty_to_confidence
     from twin_runtime.domain.models.calibration import OutcomeRecord
     from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+
+    demo = getattr(args, 'demo', False)
+    if demo:
+        print("[DEMO MODE] Reflection noted but no data will be persisted.")
+        return
 
     config = _load_config()
     user_id = config.get("user_id", "default")
@@ -470,10 +541,88 @@ def cmd_install_skills(args):
     print(f"\nInstalled {len(installed)} skills to {target}")
 
 
+def cmd_drift_report(args):
+    """Generate drift detection report."""
+    config = _load_config()
+    _apply_env(config)
+    user_id = config.get("user_id", "default")
+    twin = _require_twin(config)
+
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+    from twin_runtime.application.calibration.drift_detector import detect_drift
+    from datetime import datetime, timezone
+
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+
+    cases = cal_store.list_cases(used=None)
+    trace_ids = trace_store.list_traces(limit=10000)
+    traces = []
+    for tid in trace_ids:
+        try:
+            traces.append(trace_store.load_trace(tid))
+        except Exception:
+            continue
+
+    as_of = datetime.now(timezone.utc)
+    report = detect_drift(cases, traces, twin, as_of=as_of)
+
+    # Persist
+    report_dir = _STORE_DIR / user_id / "reports" / "drift"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = getattr(args, 'output', None) or str(report_dir / f"{as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+
+    print(f"Drift report saved: {output_path}")
+    print(f"Domain signals: {len(report.domain_signals)}, Axis signals: {len(report.axis_signals)}")
+    for sig in report.domain_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+    for sig in report.axis_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+
+
+def cmd_ontology_report(args):
+    """Generate shadow ontology report."""
+    try:
+        from twin_runtime.application.ontology.report_generator import generate_ontology_report
+    except ImportError:
+        print("This command requires: pip install twin-runtime[analysis]")
+        return
+
+    config = _load_config()
+    _apply_env(config)
+    user_id = config.get("user_id", "default")
+    twin = _require_twin(config)
+
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from datetime import datetime, timezone
+
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    cases = cal_store.list_cases(used=None)
+
+    as_of = datetime.now(timezone.utc)
+    report = generate_ontology_report(cases, twin, as_of=as_of)
+
+    # Persist
+    report_dir = _STORE_DIR / user_id / "reports" / "ontology"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = getattr(args, 'output', None) or str(report_dir / f"{as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+
+    print(f"Ontology report saved: {output_path}")
+    print(f"Domains analyzed: {report.domains_analyzed}")
+    print(f"Suggestions: {len(report.suggestions)}")
+    for s in report.suggestions:
+        label = s.llm_label or s.deterministic_label
+        print(f"  [{s.parent_domain.value}] {label} (support={s.support_count}, stability={s.stability_score:.2f})")
+
+
 def cmd_mcp_serve(args):
-    """Start MCP server (stdio transport)."""
-    print("MCP server not yet implemented. Coming in v0.1.0 release.")
-    print("Track progress: https://github.com/ziya/twin-runtime")
+    """Start MCP server (stdio, blocking)."""
+    import asyncio
+    from twin_runtime.server.mcp_server import run_server
+    asyncio.run(run_server())
 
 
 # --- Helpers ---
@@ -550,10 +699,11 @@ def main():
     sub.add_parser("init", help="Interactive setup")
 
     # run
-    p_run = sub.add_parser("run", help="Run decision pipeline")
+    p_run = sub.add_parser("run", help="Run decision pipeline", parents=[_twin_parent])
     p_run.add_argument("query", help="Decision query")
     p_run.add_argument("-o", "--options", nargs="+", required=True, help="Options to evaluate")
     p_run.add_argument("--json", action="store_true", help="Output as JSON")
+    p_run.add_argument("--max-rounds", type=int, default=2, help="Max deliberation rounds for S2")
 
     # scan
     p_scan = sub.add_parser("scan", help="Scan sources for evidence")
@@ -566,7 +716,7 @@ def main():
     sub.add_parser("evaluate", help="Run batch evaluation")
 
     # status
-    p_status = sub.add_parser("status", help="Show twin state")
+    p_status = sub.add_parser("status", help="Show twin state", parents=[_twin_parent])
     p_status.add_argument("--json", action="store_true", help="Full JSON output")
 
     # sources
@@ -584,7 +734,7 @@ def main():
     p_dashboard.add_argument("--open", action="store_true", help="Open in browser after generating")
 
     # reflect (Phase 4)
-    p_reflect = sub.add_parser("reflect", help="Record what you actually chose (feeds calibration)")
+    p_reflect = sub.add_parser("reflect", help="Record what you actually chose (feeds calibration)", parents=[_twin_parent])
     p_reflect.add_argument("--choice", required=True, help="What you actually chose")
     p_reflect.add_argument("--trace-id", help="Link to a specific pipeline trace")
     p_reflect.add_argument("--reasoning", help="Why you chose this")
@@ -598,6 +748,14 @@ def main():
 
     # mcp-serve (Phase 4)
     sub.add_parser("mcp-serve", help="Start MCP server (stdio transport)")
+
+    # drift-report (Phase 5c)
+    p_drift = sub.add_parser("drift-report", help="Generate drift detection report")
+    p_drift.add_argument("--output", help="Output file path")
+
+    # ontology-report (Phase 5c)
+    p_ontology = sub.add_parser("ontology-report", help="Generate shadow ontology report")
+    p_ontology.add_argument("--output", help="Output file path")
 
     args = parser.parse_args()
 
@@ -618,6 +776,8 @@ def main():
         "reflect": cmd_reflect,
         "install-skills": cmd_install_skills,
         "mcp-serve": cmd_mcp_serve,
+        "drift-report": cmd_drift_report,
+        "ontology-report": cmd_ontology_report,
     }
     commands[args.command](args)
 

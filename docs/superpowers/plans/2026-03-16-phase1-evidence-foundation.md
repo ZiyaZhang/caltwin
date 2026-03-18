@@ -315,7 +315,7 @@ class TestReflectionEvidence:
             **BASE,
             topic="career choice",
             sentiment="negative",
-            insight="I regret choosing Tencent over MiniMax",
+            insight="I regret choosing Company A over Company B",
         )
         assert r.evidence_type == EvidenceType.REFLECTION
         assert r.sentiment == "negative"
@@ -346,7 +346,7 @@ class TestContextEvidence:
         c = ContextEvidence(
             **BASE,
             context_category="role",
-            description="Product manager trainee at Tencent",
+            description="Product manager trainee at Company A",
         )
         assert c.evidence_type == EvidenceType.CONTEXT
         assert c.context_category == "role"
@@ -1195,9 +1195,9 @@ class TestColdStart:
             ContextEvidence(
                 source_type="test", source_id="t-2",
                 occurred_at=now, valid_from=now,
-                summary="Product manager at Tencent",
+                summary="Product manager at Company A",
                 confidence=0.9, user_id="user-new",
-                context_category="role", description="PM trainee at Tencent",
+                context_category="role", description="PM trainee at Company A",
             ),
         ]
         twin = compiler._create_initial(user_id="user-new", fragments=fragments)

@@ -47,13 +47,43 @@ class JsonFileEvidenceStore:
         path.write_text(cluster.model_dump_json(indent=2))
         return cluster.cluster_id
 
-    def query(self, query: RecallQuery) -> List[EvidenceFragment]:
-        results = []
+    def query(self, recall_query: RecallQuery) -> List[EvidenceFragment]:
+        """Filter and rank evidence fragments by domain, type, and keyword relevance."""
+        fragments = []
         for p in (self.base / "fragments").glob("*.json"):
-            frag = EvidenceFragment.model_validate_json(p.read_text())
-            if hasattr(query, "user_id") and frag.user_id == query.user_id:
-                results.append(frag)
-        return results
+            try:
+                frag = EvidenceFragment.model_validate_json(p.read_text())
+                fragments.append(frag)
+            except Exception:
+                continue
+
+        # Filter by domain (EvidenceFragment uses domain_hint)
+        if recall_query.target_domain:
+            fragments = [f for f in fragments if f.domain_hint == recall_query.target_domain]
+        elif recall_query.domain_filter:
+            fragments = [f for f in fragments if f.domain_hint in recall_query.domain_filter]
+
+        # Filter by evidence type
+        if recall_query.target_evidence_type:
+            fragments = [f for f in fragments if f.evidence_type == recall_query.target_evidence_type]
+        elif recall_query.evidence_type_filter:
+            fragments = [f for f in fragments if f.evidence_type in recall_query.evidence_type_filter]
+
+        # Rank by topic_keywords relevance
+        if recall_query.topic_keywords:
+            def relevance_score(frag):
+                text = (frag.summary or "") + " " + (frag.raw_excerpt or "")
+                text_lower = text.lower()
+                return sum(1 for kw in recall_query.topic_keywords if kw.lower() in text_lower)
+
+            fragments.sort(key=relevance_score, reverse=True)
+            # Return empty if no keywords match (honest retrieval)
+            fragments = [f for f in fragments if relevance_score(f) > 0]
+        else:
+            # Default: sort by recency (EvidenceFragment uses occurred_at)
+            fragments.sort(key=lambda f: f.occurred_at, reverse=True)
+
+        return fragments[:recall_query.limit]
 
     def get_by_hash(self, content_hash: str) -> Optional[EvidenceFragment]:
         path = self.base / "fragments" / f"{content_hash}.json"

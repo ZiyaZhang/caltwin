@@ -172,9 +172,9 @@ The three timestamps serve distinct purposes:
 - `valid_from`: When did this preference/state start being true? (For applicability)
 - `valid_until`: When did it stop? (For filtering stale evidence)
 
-Example: User said on March 1 "I've been risk-averse since joining Tencent in September."
+Example: User said on March 1 "I've been risk-averse since joining Company A in September."
 - `occurred_at = 2026-03-01` (when they said it)
-- `valid_from = 2025-09-01` (when they joined Tencent)
+- `valid_from = 2025-09-01` (when they joined Company A)
 - `valid_until = None` (still true)
 
 #### 1.3 Content Hash and Deduplication

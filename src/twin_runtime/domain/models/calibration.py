@@ -34,6 +34,10 @@ class CandidateCalibrationCase(BaseModel):
     reversibility: OrdinalTriLevel
     time_pressure: Optional[OrdinalTriLevel] = None
     ground_truth_confidence: float = confidence_field()
+    decision_occurred_at: Optional[datetime] = Field(
+        default=None,
+        description="When the original decision was made. Decay uses this if available, falls back to created_at.",
+    )
     promoted_to_calibration_case: bool = False
     promotion_reason: Optional[str] = None
 
@@ -51,6 +55,19 @@ class CalibrationCase(BaseModel):
     reversibility: OrdinalTriLevel
     time_pressure: Optional[OrdinalTriLevel] = None
     confidence_of_ground_truth: float = confidence_field()
+    expect_abstention: bool = Field(
+        default=False,
+        description="True for out-of-scope cases where twin SHOULD refuse/degrade. "
+        "Only these cases contribute to abstention_accuracy.",
+    )
+    decision_occurred_at: Optional[datetime] = Field(
+        default=None,
+        description="When the original decision was made. Decay uses this if available, falls back to created_at.",
+    )
+    contradiction_discount: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Reserved for future use.",
+    )
     used_for_calibration: bool = False
 
 
@@ -65,6 +82,7 @@ class EvaluationCaseDetail(BaseModel):
     actual_choice: str
     confidence_at_prediction: float = confidence_field()
     residual_direction: str
+    time_decay_weight: float = Field(default=1.0, description="Decay weight at evaluation time")
 
     @field_validator("task_type", mode="before")
     @classmethod
@@ -87,6 +105,20 @@ class TwinEvaluation(BaseModel):
         default_factory=dict,
         description="Map of 'from->to' -> reliability score.",
     )
+    failed_case_count: int = Field(default=0, description="Cases that failed due to system error, excluded from metrics")
+    abstention_accuracy: Optional[float] = Field(
+        default=None,
+        ge=0.0, le=1.0,
+        description="% of out-of-scope cases correctly REFUSED or DEGRADED",
+    )
+    abstention_case_count: int = Field(
+        default=0,
+        description="Number of out-of-scope cases evaluated for abstention",
+    )
+    weighted_choice_similarity: Optional[float] = Field(default=None)
+    weighted_reasoning_similarity: Optional[float] = Field(default=None)
+    weighted_domain_reliability: Optional[Dict[str, float]] = Field(default=None)
+    decay_params_used: Optional[Dict[str, Any]] = Field(default=None)
     prior_bias_flags: List[str] = Field(default_factory=list)
     evaluated_at: datetime
     case_details: List[EvaluationCaseDetail] = Field(default_factory=list)

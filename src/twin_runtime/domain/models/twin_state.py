@@ -82,6 +82,10 @@ class DomainHead(BaseModel):
     head_version: str
     goal_axes: List[str]
     default_priority_order: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(
+        default_factory=list,
+        description="Domain-specific keywords for rule-based routing. Supports any language."
+    )
     evidence_weight_profile: EvidenceWeightProfile
     head_reliability: float = confidence_field()
     supported_task_types: List[str]

@@ -113,7 +113,7 @@ class TestReflectionEvidence:
             **BASE,
             topic="career choice",
             sentiment="negative",
-            insight="I regret choosing Tencent over MiniMax",
+            insight="I regret choosing Company A over Company B",
         )
         assert r.evidence_type == EvidenceType.REFLECTION
         assert r.sentiment == "negative"
@@ -144,7 +144,7 @@ class TestContextEvidence:
         c = ContextEvidence(
             **BASE,
             context_category="role",
-            description="Product manager trainee at Tencent",
+            description="Product manager trainee at Company A",
         )
         assert c.evidence_type == EvidenceType.CONTEXT
         assert c.context_category == "role"

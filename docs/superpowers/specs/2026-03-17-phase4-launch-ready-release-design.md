@@ -362,8 +362,8 @@ google = ["google-api-python-client", "google-auth-oauthlib"]
 twin-runtime = "twin_runtime.interfaces.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ziya/twin-runtime"
-Repository = "https://github.com/ziya/twin-runtime"
+Homepage = "https://github.com/ZiyaZhang/caltwin"
+Repository = "https://github.com/ZiyaZhang/caltwin"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -565,7 +565,7 @@ Implementation: add 3-5 out-of-scope test cases to calibration set (e.g., medica
 
 ### 7.5 Pilot User Evidence (Post-Launch, Pre-Investment)
 
-Target: 10 designed users (5 internal Tencent, 5 external from OpenClaw community). Measure before/after:
+Target: 10 designed users (5 internal Company A, 5 external from OpenClaw community). Measure before/after:
 - Decision response time (seconds from question to committed choice)
 - Reflection quality (does user articulate reasoning more clearly?)
 - Regret rate (self-reported, 2-week follow-up)

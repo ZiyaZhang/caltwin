@@ -34,6 +34,10 @@ class ConflictReport(BaseModel):
     activated_heads: List[DomainEnum]
     conflict_types: List[ConflictType] = Field(min_length=1)
     utility_conflict_axes: List[str] = Field(default_factory=list)
+    ranking_divergence_pairs: List[str] = Field(
+        default_factory=list,
+        description="Cross-domain ranking inversions",
+    )
     belief_conflict_axes: List[str] = Field(default_factory=list)
     evidence_conflict_sources: List[str] = Field(default_factory=list)
     resolvable_by_system: bool
@@ -47,7 +51,7 @@ class RuntimeDecisionTrace(BaseModel):
     twin_state_version: str
     situation_frame_id: str = Field(min_length=1)
     activated_domains: List[DomainEnum]
-    head_assessments: List[HeadAssessment] = Field(min_length=1)
+    head_assessments: List[HeadAssessment] = Field(default_factory=list)
     conflict_report_id: Optional[str] = None
     final_decision: str
     decision_mode: DecisionMode
@@ -71,6 +75,27 @@ class RuntimeDecisionTrace(BaseModel):
         default=None, description="MicroCalibrationUpdate if micro_calibrate=True"
     )
     created_at: datetime
+    query: str = Field(default="", description="Original decision query")
+    situation_frame: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="JSON-safe snapshot of SituationFrame at decision time",
+    )
+    scope_guard_result: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Deterministic scope guard output",
+    )
+    refusal_reason_code: Optional[str] = Field(
+        default=None,
+        description="OUT_OF_SCOPE | NON_MODELED | NON_MODELED_PARTIAL | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE | INSUFFICIENT_EVIDENCE",
+    )
+    # Routing metadata (Phase 5b)
+    route_path: str = Field(default="s1_direct", description="Execution path: s1_direct | s2_deliberate | no_execution")
+    route_reason_codes: List[str] = Field(default_factory=list)
+    boundary_policy: str = Field(default="normal", description="normal | force_degrade | force_refuse")
+    deliberation_rounds: int = Field(default=0, description="Number of deliberation rounds (S1=0)")
+    terminated_by: Optional[str] = Field(default=None, description="TerminationReason value")
+    deliberation_round_summaries: List[Dict[str, Any]] = Field(default_factory=list)
+    shadow_scores: Optional[Dict[str, float]] = Field(default=None)
 
 
 class RuntimeEvent(BaseModel):

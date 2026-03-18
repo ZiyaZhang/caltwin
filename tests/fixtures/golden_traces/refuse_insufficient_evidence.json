@@ -1,0 +1,75 @@
+{
+  "name": "refuse_insufficient_evidence",
+  "description": "S2 deliberation exhausts budget with conflicting assessments and no new evidence → INSUFFICIENT_EVIDENCE",
+  "query": "Should I invest in real estate or keep renting and invest in stocks?",
+  "option_set": ["Buy property", "Keep renting"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"money": 0.5, "life_planning": 0.5},
+      "reversibility": "low",
+      "stakes": "high",
+      "uncertainty_type": "value_conflict",
+      "controllability": "medium",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.8,
+      "clarification_questions": []
+    },
+    "round_0": {
+      "head_assess_money": {
+        "option_ranking": ["Keep renting", "Buy property"],
+        "utility_decomposition": {"roi": 0.7, "liquidity": 0.8, "security": 0.3},
+        "confidence": 0.4,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_life_planning": {
+        "option_ranking": ["Buy property", "Keep renting"],
+        "utility_decomposition": {"stability": 0.9, "flexibility": 0.3, "security": 0.8},
+        "confidence": 0.35,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      }
+    },
+    "round_1": {
+      "head_assess_money": {
+        "option_ranking": ["Keep renting", "Buy property"],
+        "utility_decomposition": {"roi": 0.7, "liquidity": 0.8, "security": 0.3},
+        "confidence": 0.42,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_life_planning": {
+        "option_ranking": ["Buy property", "Keep renting"],
+        "utility_decomposition": {"stability": 0.9, "flexibility": 0.3, "security": 0.8},
+        "confidence": 0.38,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      }
+    },
+    "round_2": {
+      "head_assess_money": {
+        "option_ranking": ["Keep renting", "Buy property"],
+        "utility_decomposition": {"roi": 0.7, "liquidity": 0.8, "security": 0.3},
+        "confidence": 0.43,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      },
+      "head_assess_life_planning": {
+        "option_ranking": ["Buy property", "Keep renting"],
+        "utility_decomposition": {"stability": 0.9, "flexibility": 0.3, "security": 0.8},
+        "confidence": 0.39,
+        "used_core_variables": ["risk_tolerance"],
+        "used_evidence_types": []
+      }
+    },
+    "synthesize": "Insufficient evidence to resolve conflicting assessments."
+  },
+  "expected": {
+    "decision_mode": "refused",
+    "refusal_reason_code": "INSUFFICIENT_EVIDENCE",
+    "route_path": "s2_deliberate"
+  }
+}

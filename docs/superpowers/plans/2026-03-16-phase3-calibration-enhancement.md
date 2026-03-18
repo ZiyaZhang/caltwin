@@ -201,7 +201,7 @@ class TestOutcomeRecord:
         defaults = dict(
             outcome_id="out-1",
             trace_id="trace-1",
-            user_id="user-ziya",
+            user_id="user-default",
             actual_choice="选项A",
             outcome_source=OutcomeSource.USER_CORRECTION,
             prediction_rank=1,
@@ -427,7 +427,7 @@ class TestDetectedBias:
         b = self._make(
             status=DetectedBiasStatus.ACCEPTED,
             reviewed_at=datetime.now(timezone.utc),
-            reviewed_by="user-ziya",
+            reviewed_by="user-default",
         )
         assert b.status == DetectedBiasStatus.ACCEPTED
 
@@ -2039,7 +2039,7 @@ from twin_runtime.application.calibration.fidelity_evaluator import (
 from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
 
 STORE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "store")
-USER_ID = "user-ziya"
+USER_ID = "user-default"
 FIXTURE = os.path.join(os.path.dirname(__file__), "..", "tests", "fixtures", "sample_twin_state.json")
 
 
@@ -2215,7 +2215,7 @@ def sample_payload():
     eval_.evaluation_id = "ev-1"
     twin = MagicMock()
     twin.state_version = "v002"
-    twin.id = "twin-ziya"
+    twin.id = "twin-default"
     return DashboardPayload(
         fidelity_score=score, evaluation=eval_, twin=twin,
     )
@@ -2291,7 +2291,7 @@ class TestDashboardGeneration:
                 supporting_case_ids=["c1", "c2", "c3"], sample_size=3,
                 bias_strength=0.67, llm_analysis="test",
                 status=DetectedBiasStatus.ACCEPTED,
-                reviewed_at=datetime.now(timezone.utc), reviewed_by="user-ziya",
+                reviewed_at=datetime.now(timezone.utc), reviewed_by="user-default",
             ),
         ]
         html = generate_dashboard(sample_payload)
@@ -2614,7 +2614,7 @@ Expected: all passed, count should be ~240+
 - [ ] **Step 2: Run batch evaluation**
 
 Run: `python3 tools/batch_evaluate.py`
-Expected: Runs 20 cases, produces `TwinFidelityScore` with four metrics, saves to `data/store/user-ziya/calibration/`
+Expected: Runs 20 cases, produces `TwinFidelityScore` with four metrics, saves to `data/store/user-default/calibration/`
 
 - [ ] **Step 3: Run batch evaluation with bias detection**
 
@@ -2646,7 +2646,7 @@ Compare new TwinFidelityScore against Phase 2b baseline:
 - [ ] **Step 7: Final commit**
 
 ```bash
-git add data/store/user-ziya/calibration/ tools/batch_evaluate.py
+git add data/store/user-default/calibration/ tools/batch_evaluate.py
 git commit -m "feat(phase3): end-to-end validation — batch evaluation + fidelity dashboard working"
 ```
 

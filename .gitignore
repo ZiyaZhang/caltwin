@@ -12,3 +12,6 @@ venv/
 data/
 .DS_Store
 data/store/
+fidelity_report.html
+.claude/settings.local.json
+docs/fidelity_report_demo.html

@@ -58,23 +58,38 @@ def collect_event(
     # Use the primary activated domain
     primary_domain = trace.activated_domains[0] if trace.activated_domains else DomainEnum.WORK
 
-    # Extract stakes/reversibility from head assessments if available
-    # Default to medium — the situation interpreter already classified these
-    # but they're in the SituationFrame which isn't stored on the trace.
-    # For v0.1, use defaults; later we can thread the frame through.
+    # Use trace.query for context, and extract stakes/reversibility from
+    # situation_frame if available (populated since Phase 5a).
+    observed_context = trace.query if trace.query else f"Query that produced trace {trace.trace_id}"
+    stakes = OrdinalTriLevel.MEDIUM
+    reversibility = OrdinalTriLevel.MEDIUM
+    if trace.situation_frame:
+        sfv = trace.situation_frame.get("situation_feature_vector", {})
+        if sfv.get("stakes"):
+            try:
+                stakes = OrdinalTriLevel(sfv["stakes"])
+            except ValueError:
+                pass
+        if sfv.get("reversibility"):
+            try:
+                reversibility = OrdinalTriLevel(sfv["reversibility"])
+            except ValueError:
+                pass
+
     candidate = CandidateCalibrationCase(
         candidate_id=str(uuid.uuid4()),
         created_at=now,
         source_type=source_type,
         originating_trace_id=trace.trace_id,
         domain_label=primary_domain,
-        observed_context=f"Query that produced trace {trace.trace_id}",
+        observed_context=observed_context,
         option_set=_extract_options(trace),
         observed_choice=user_actual_choice,
         observed_reasoning=user_reasoning,
-        stakes=OrdinalTriLevel.MEDIUM,
-        reversibility=OrdinalTriLevel.MEDIUM,
+        stakes=stakes,
+        reversibility=reversibility,
         ground_truth_confidence=ground_truth_confidence,
+        decision_occurred_at=trace.created_at,
     )
 
     return event, candidate
@@ -89,6 +104,7 @@ def collect_manual_case(
     stakes: OrdinalTriLevel = OrdinalTriLevel.MEDIUM,
     reversibility: OrdinalTriLevel = OrdinalTriLevel.MEDIUM,
     ground_truth_confidence: float = 0.9,
+    decision_occurred_at: Optional[datetime] = None,
 ) -> CandidateCalibrationCase:
     """Create a CandidateCalibrationCase from manual user input (life-anchor).
 
@@ -107,6 +123,7 @@ def collect_manual_case(
         stakes=stakes,
         reversibility=reversibility,
         ground_truth_confidence=ground_truth_confidence,
+        decision_occurred_at=decision_occurred_at,
     )
 
 

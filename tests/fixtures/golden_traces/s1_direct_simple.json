@@ -1,0 +1,38 @@
+{
+  "name": "s1_direct_simple",
+  "description": "High-confidence single-domain work decision, S1 fast path",
+  "query": "Should I prioritize the refactor or the new feature?",
+  "option_set": ["Refactor first", "New feature first"],
+  "twin_fixture": "tests/fixtures/sample_twin_state.json",
+  "evidence_fixture": null,
+  "force_path": null,
+  "llm_script": {
+    "interpret": {
+      "domain_activation": {"work": 0.95},
+      "reversibility": "high",
+      "stakes": "low",
+      "uncertainty_type": "outcome_uncertainty",
+      "controllability": "high",
+      "option_structure": "choose_existing",
+      "ambiguity_score": 0.1,
+      "clarification_questions": []
+    },
+    "head_assess_work": {
+      "option_ranking": ["Refactor first", "New feature first"],
+      "utility_decomposition": {"impact": 0.8, "urgency": 0.6},
+      "confidence": 0.85,
+      "used_core_variables": ["risk_tolerance"],
+      "used_evidence_types": []
+    },
+    "synthesize": "I'd prioritize the refactor — tech debt compounds."
+  },
+  "expected": {
+    "decision_mode": "direct",
+    "refusal_reason_code": null,
+    "route_path": "s1_direct",
+    "boundary_policy": "normal",
+    "deliberation_rounds": 0,
+    "terminated_by": null,
+    "expected_top_choice": "Refactor first"
+  }
+}

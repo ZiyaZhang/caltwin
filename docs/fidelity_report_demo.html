@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Twin Fidelity Report — twin-001</title>
+  <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 24px 16px;
+}
+.container { max-width: 900px; margin: auto; }
+h1 { font-size: 1.6rem; color: #90caf9; margin-bottom: 8px; }
+h2 { font-size: 1.1rem; color: #90caf9; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+.card {
+  background: #16213e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.overview-grid {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.overview-grid > div:first-child { flex: 1; min-width: 260px; }
+.radar-wrap { flex-shrink: 0; }
+.score-big { font-size: 3rem; font-weight: bold; margin-bottom: 8px; }
+.progress-bar-bg {
+  background: #2a2a4a;
+  border-radius: 4px;
+  height: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.progress-bar-fg { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.meta { color: #9e9e9e; font-size: 12px; margin-bottom: 10px; }
+.metrics-table { width: 100%; border-collapse: collapse; }
+.metrics-table th, .metrics-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid #2a2a4a;
+}
+.metrics-table th { color: #90caf9; font-weight: 600; }
+.domain-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.domain-card {
+  background: #0f3460;
+  border-radius: 6px;
+  padding: 12px 16px;
+  min-width: 140px;
+  flex: 1;
+}
+.domain-name { font-size: 12px; color: #9e9e9e; margin-bottom: 4px; }
+.domain-score { font-size: 1.4rem; font-weight: bold; margin-bottom: 6px; }
+.domain-bar-bg { background: #1a1a2e; border-radius: 3px; height: 6px; overflow: hidden; }
+.domain-bar-fg { height: 100%; border-radius: 3px; }
+.warn-red { color: #f44336; font-size: 12px; margin-left: 4px; }
+.warn-yellow { color: #ff9800; font-size: 12px; margin-left: 4px; }
+.table-scroll { overflow-x: auto; }
+.case-table { min-width: 700px; }
+.context-cell { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mono { font-family: monospace; font-size: 12px; }
+footer {
+  text-align: center;
+  color: #555;
+  font-size: 12px;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid #2a2a4a;
+}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Twin Fidelity Report</h1>
+    <p class="meta">Twin: twin-001 &middot; Version: v002 &middot; Generated: 2026-03-17 09:35 UTC</p>
+    
+<section class="card">
+  <h2>Overall Fidelity</h2>
+  <div class="overview-grid">
+    <div>
+      <div class="score-big" style="color:#f44336">40.9%</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fg" style="width:40.9%;background:#f44336"></div>
+      </div>
+      <p class="meta">Twin: <strong>twin-001</strong> &mdash; version <strong>v002</strong></p>
+      <table class="metrics-table">
+        <thead><tr><th>Metric</th><th>Score</th><th>Confidence / Cases</th><th>Warnings</th></tr></thead>
+        <tbody><tr><td>Choice Fidelity (CF)</td><td style="color:#ff9800">75.8%</td><td>conf: 0.67 | n=20</td><td></td></tr>
+<tr><td>Reasoning Fidelity (RF)</td><td style="color:#f44336">0.0%</td><td>conf: 1.00 | n=20</td><td></td></tr>
+<tr><td>Calibration Quality (CQ)</td><td style="color:#4caf50">80.7%</td><td>conf: 0.44 | n=20</td><td></td></tr>
+<tr><td>Temporal Stability (TS)</td><td style="color:#4caf50">100.0%</td><td>conf: 0.00 | n=1</td><td><span class="warn-red">⚠ <span class="label">数据不足</span></span><span class="warn-yellow" title="low confidence">⚠ <span class="label">置信度不足</span></span></td></tr>
+</tbody>
+      </table>
+    </div>
+    <div class="radar-wrap">
+      <svg width="260" height="260" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
+<circle cx="130" cy="130" r="25.0" fill="none" stroke="#444" stroke-width="1"/>
+<circle cx="130" cy="130" r="50.0" fill="none" stroke="#444" stroke-width="1"/>
+<circle cx="130" cy="130" r="75.0" fill="none" stroke="#444" stroke-width="1"/>
+<circle cx="130" cy="130" r="100.0" fill="none" stroke="#444" stroke-width="1"/>
+<line x1="130" y1="130" x2="130.0" y2="30.0" stroke="#555" stroke-width="1"/>
+<line x1="130" y1="130" x2="230.0" y2="130.0" stroke="#555" stroke-width="1"/>
+<line x1="130" y1="130" x2="130.0" y2="230.0" stroke="#555" stroke-width="1"/>
+<line x1="130" y1="130" x2="30.0" y2="130.0" stroke="#555" stroke-width="1"/>
+<polygon points="130.0,54.2 130.0,130.0 130.0,210.7 30.0,130.0" fill="rgba(100,180,255,0.25)" stroke="#64b4ff" stroke-width="2"/>
+<text x="130.0" y="11.0" fill="#e0e0e0" font-size="11" text-anchor="middle">CF 75.8%</text>
+<text x="253.0" y="134.0" fill="#e0e0e0" font-size="11" text-anchor="middle">RF 0.0%</text>
+<text x="130.0" y="253.0" fill="#e0e0e0" font-size="11" text-anchor="middle">CQ 80.7%</text>
+<text x="7.0" y="134.0" fill="#e0e0e0" font-size="11" text-anchor="middle">TS 100.0%</text>
+</svg>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Domain Breakdown</h2>
+  <div class="domain-grid">
+    <div class="domain-card"><div class="domain-name">life_planning</div><div class="domain-score" style="color:#4caf50">80.0%</div><div class="domain-bar-bg"><div class="domain-bar-fg" style="width:80.0%;background:#4caf50"></div></div></div>
+<div class="domain-card"><div class="domain-name">money</div><div class="domain-score" style="color:#4caf50">100.0%</div><div class="domain-bar-bg"><div class="domain-bar-fg" style="width:100.0%;background:#4caf50"></div></div></div>
+<div class="domain-card"><div class="domain-name">work</div><div class="domain-score" style="color:#ff9800">68.1%</div><div class="domain-bar-bg"><div class="domain-bar-fg" style="width:68.1%;background:#ff9800"></div></div></div>
+
+  </div>
+</section>
+
+<section class="card">
+  <h2>ECE Calibration Breakdown</h2>
+  <p class="meta">Overall calibration quality: <strong>80.7%</strong></p>
+  <table class="metrics-table">
+    <thead>
+      <tr><th>Confidence Range</th><th>Avg Confidence</th><th>Accuracy</th><th>Gap</th><th>Count</th></tr>
+    </thead>
+    <tbody><tr><td>[0.0, 0.3]</td><td>0.00</td><td>0.00</td><td style="color:#4caf50">0.00</td><td>0</td></tr>
+<tr><td>[0.3, 0.6]</td><td>0.00</td><td>0.00</td><td style="color:#4caf50">0.00</td><td>0</td></tr>
+<tr><td>[0.6, 1.0]</td><td>0.74</td><td>0.55</td><td style="color:#ff9800">0.19</td><td>20</td></tr>
+</tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Case Details</h2>
+  <div class="table-scroll">
+    <table class="metrics-table case-table">
+      <thead>
+        <tr>
+          <th>Case ID</th><th>Domain</th><th>Task</th><th>Context</th>
+          <th>Choice Score</th><th>Actual</th><th>Confidence</th><th>Residual</th>
+        </tr>
+      </thead>
+      <tbody><tr><td class="mono">00ec30c8-a87a-4c2c-9bff-2b7dded2bec5</td><td>work</td><td>collaboration_style</td><td class="context-cell" title="汇报AI+社交研究结论时，需要决定用什么方式呈现优先级建议。">汇报AI+社交研究结论时，需要决定用什么方式呈现优先级建议。</td><td style="color:#f44336">0.50</td><td>直觉判断+协作讨论</td><td>0.73</td><td>twin首选&#x27;数据驱动论证&#x27;，实际为&#x27;直觉判断+协作讨论&#x27;</td></tr>
+<tr><td class="mono">1a1a8b95-d4ec-4d5d-9241-c7641552b006</td><td>life_planning</td><td>career_direction</td><td class="context-cell" title="面对一个不确定但有upside的机会 vs 一个确定但平庸的选项。">面对一个不确定但有upside的机会 vs 一个确定但平庸的选项。</td><td style="color:#4caf50">1.00</td><td>不确定但有upside</td><td>0.72</td><td></td></tr>
+<tr><td class="mono">1f38e92c-515a-478f-9992-d3113fccea45</td><td>work</td><td>collaboration_style</td><td class="context-cell" title="写PRD时选择工作方式。">写PRD时选择工作方式。</td><td style="color:#4caf50">1.00</td><td>AI先出稿自己改</td><td>0.82</td><td></td></tr>
+<tr><td class="mono">2048da17-98da-47a1-9fd6-961a63b09f79</td><td>work</td><td>prioritization</td><td class="context-cell" title="AI+社交方向研究，需要给团队推荐主攻方向。选项包括：原生内容社区、虚拟陪伴、游戏陪玩。">AI+社交方向研究，需要给团队推荐主攻方向。选项包括：原生内容社区、虚拟陪伴、游戏陪玩。</td><td style="color:#f44336">0.33</td><td>游戏陪玩</td><td>0.73</td><td>twin首选&#x27;原生内容社区&#x27;，实际为&#x27;游戏陪玩&#x27;</td></tr>
+<tr><td class="mono">29b050dc-747d-4366-a9ca-ac257a0cd87d</td><td>work</td><td>tool_selection</td><td class="context-cell" title="做上下文工作流工具，需要决定是从头造工具还是基于现有平台做插件。">做上下文工作流工具，需要决定是从头造工具还是基于现有平台做插件。</td><td style="color:#4caf50">1.00</td><td>基于现有平台做插件</td><td>0.77</td><td></td></tr>
+<tr><td class="mono">46778555-41d8-4ffc-9c4e-85cb0982582c</td><td>money</td><td>investment_style</td><td class="context-cell" title="投资风格选择：分散频繁调仓 vs 重仓长持。工作后没时间盯盘。">投资风格选择：分散频繁调仓 vs 重仓长持。工作后没时间盯盘。</td><td style="color:#4caf50">1.00</td><td>看好就重仓长持</td><td>0.79</td><td></td></tr>
+<tr><td class="mono">4f5c0bcc-4110-4413-951d-a5b9f096ef9a</td><td>work</td><td>project_scoping</td><td class="context-cell" title="准备轮岗需要作品集，要选择主攻技术方向来做开源项目。">准备轮岗需要作品集，要选择主攻技术方向来做开源项目。</td><td style="color:#f44336">0.50</td><td>在OpenClaw生态做插件/skills</td><td>0.76</td><td>twin首选&#x27;做独立AI应用&#x27;，实际为&#x27;在OpenClaw生态做插件/skills&#x27;</td></tr>
+<tr><td class="mono">5a53093b-a289-4594-8924-16ca67b47b69</td><td>work</td><td>tool_selection</td><td class="context-cell" title="日常工作中选择协作和知识管理工具组合。">日常工作中选择协作和知识管理工具组合。</td><td style="color:#f44336">0.50</td><td>企业微信+NotebookLM+多AI工具</td><td>0.72</td><td>twin首选&#x27;Notion+其他&#x27;，实际为&#x27;企业微信+NotebookLM+多AI工具&#x27;</td></tr>
+<tr><td class="mono">6c3a66df-7015-4e94-ad8f-5857c1c1c6fa</td><td>work</td><td>collaboration_style</td><td class="context-cell" title="做了spec coding的研究，需要决定知识输出方式。">做了spec coding的研究，需要决定知识输出方式。</td><td style="color:#f44336">0.33</td><td>团队内部分享</td><td>0.73</td><td>twin首选&#x27;写公开博客&#x27;，实际为&#x27;团队内部分享&#x27;</td></tr>
+<tr><td class="mono">6c908761-3c98-4ab8-b850-c04083ebdc39</td><td>work</td><td>project_scoping</td><td class="context-cell" title="Notion内容显示：研究AI交互形态（对话/分区/嵌入/后台/插件），需要为元宝推荐主交互模式。">Notion内容显示：研究AI交互形态（对话/分区/嵌入/后台/插件），需要为元宝推荐主交互模式。</td><td style="color:#4caf50">1.00</td><td>插件悬浮球</td><td>0.78</td><td></td></tr>
+<tr><td class="mono">82ecf472-e2fd-4294-9e1f-a09fdde89f6b</td><td>life_planning</td><td>city_choice</td><td class="context-cell" title="如果离开腾讯（深圳），选择下一个城市。">如果离开腾讯（深圳），选择下一个城市。</td><td style="color:#4caf50">1.00</td><td>上海</td><td>0.69</td><td></td></tr>
+<tr><td class="mono">895f6749-451e-4ab0-b3dc-4fd0df178cc3</td><td>life_planning</td><td>career_direction</td><td class="context-cell" title="校招时需要在minimax（AI独角兽）和腾讯（大厂管培生）之间选择。">校招时需要在minimax（AI独角兽）和腾讯（大厂管培生）之间选择。</td><td style="color:#f44336">0.50</td><td>加入腾讯管培</td><td>0.73</td><td>twin首选&#x27;留在minimax&#x27;，实际为&#x27;加入腾讯管培&#x27;</td></tr>
+<tr><td class="mono">994c588d-186a-4ebb-82b7-20b1719a406e</td><td>money</td><td>asset_allocation</td><td class="context-cell" title="个人投资组合需要决定港股和美股的配置比例。">个人投资组合需要决定港股和美股的配置比例。</td><td style="color:#4caf50">1.00</td><td>美股为主</td><td>0.73</td><td></td></tr>
+<tr><td class="mono">9e7b963b-3ed7-4aef-a444-9d15777b7e0a</td><td>money</td><td>asset_allocation</td><td class="context-cell" title="是否配置BTC作为投资组合一部分。">是否配置BTC作为投资组合一部分。</td><td style="color:#4caf50">1.00</td><td>配置BTC</td><td>0.72</td><td></td></tr>
+<tr><td class="mono">cddac6cb-35e1-437f-8ae4-63e8fa39f30d</td><td>life_planning</td><td>career_direction</td><td class="context-cell" title="如果重新做校招选择（假设性回溯），已知腾讯的实际体验。">如果重新做校招选择（假设性回溯），已知腾讯的实际体验。</td><td style="color:#4caf50">1.00</td><td>留在minimax这样的独角兽</td><td>0.72</td><td></td></tr>
+<tr><td class="mono">d158d2cc-b64d-406f-991c-3c056c1905f2</td><td>work</td><td>collaboration_style</td><td class="context-cell" title="上级指派了一个不认同的方向，需要决定如何应对。">上级指派了一个不认同的方向，需要决定如何应对。</td><td style="color:#4caf50">1.00</td><td>间接拒绝/消极执行</td><td>0.72</td><td></td></tr>
+<tr><td class="mono">d5b1a34b-d365-4b81-8d52-fec3894186bf</td><td>work</td><td>tool_selection</td><td class="context-cell" title="学习新技术（如Claude Code/MCP）时，选择学习路径。">学习新技术（如Claude Code/MCP）时，选择学习路径。</td><td style="color:#f44336">0.50</td><td>先读文档再动手</td><td>0.78</td><td>twin首选&#x27;直接上手试&#x27;，实际为&#x27;先读文档再动手&#x27;</td></tr>
+<tr><td class="mono">db00d157-9037-4245-8620-3f30b1650a85</td><td>life_planning</td><td>career_direction</td><td class="context-cell" title="在腾讯工作一年后感到系统太旧、senior不懂AI、不够前沿。需要决定下一步。">在腾讯工作一年后感到系统太旧、senior不懂AI、不够前沿。需要决定下一步。</td><td style="color:#f44336">0.50</td><td>腾讯内部转AI native产品组</td><td>0.72</td><td>twin首选&#x27;离开去外部AI native公司&#x27;，实际为&#x27;腾讯内部转AI native产品组&#x27;</td></tr>
+<tr><td class="mono">ef3c91a8-7159-425a-a4ca-44bf8b23daa7</td><td>work</td><td>tool_selection</td><td class="context-cell" title="搭建twin-runtime项目需要选择技术栈。">搭建twin-runtime项目需要选择技术栈。</td><td style="color:#f44336">0.50</td><td>Python + Pydantic</td><td>0.78</td><td>twin首选&#x27;TypeScript&#x27;，实际为&#x27;Python + Pydantic&#x27;</td></tr>
+<tr><td class="mono">f1f39306-ddf7-414a-a364-9175f7844c24</td><td>work</td><td>prioritization</td><td class="context-cell" title="投资分析方法论选择：短期快速扫描 vs 长期深度研究。">投资分析方法论选择：短期快速扫描 vs 长期深度研究。</td><td style="color:#4caf50">1.00</td><td>两者结合分场景</td><td>0.73</td><td></td></tr>
+</tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Score Trend</h2>
+  <table class="metrics-table">
+    <thead><tr><th>Date</th><th>Version</th><th>Overall Score</th><th></th></tr></thead>
+    <tbody><tr><td>2026-03-16 17:53</td><td>v002</td><td style="color:#f44336">40.9%</td><td class="meta"> &larr; current</td></tr>
+<tr><td>2026-03-16 17:53</td><td>v002</td><td style="color:#f44336">40.9%</td><td class="meta"> &larr; current</td></tr>
+</tbody>
+  </table>
+</section>
+
+    <footer>
+      Generated by twin-runtime &middot; OpenClaw Persona Runtime Adapter
+    </footer>
+  </div>
+</body>
+</html>

@@ -46,8 +46,7 @@ class TestChoiceSimilarity:
 
 
 class TestEvaluateFidelityPopulatesCaseDetails:
-    @patch("twin_runtime.application.calibration.fidelity_evaluator.run")
-    def test_case_details_populated(self, mock_run):
+    def test_case_details_populated(self):
         from twin_runtime.application.calibration.fidelity_evaluator import evaluate_fidelity
         from twin_runtime.domain.models.calibration import CalibrationCase
         from twin_runtime.domain.models.primitives import DomainEnum, OrdinalTriLevel
@@ -62,7 +61,7 @@ class TestEvaluateFidelityPopulatesCaseDetails:
         ha.option_ranking = ["A", "B"]
         ha.domain = DomainEnum.WORK
         mock_trace.head_assessments = [ha]
-        mock_run.return_value = mock_trace
+        mock_runner = MagicMock(return_value=mock_trace)
 
         with open("tests/fixtures/sample_twin_state.json") as f:
             from twin_runtime.domain.models.twin_state import TwinState
@@ -77,7 +76,7 @@ class TestEvaluateFidelityPopulatesCaseDetails:
             confidence_of_ground_truth=0.9,
         )
 
-        evaluation = evaluate_fidelity([case], twin)
+        evaluation = evaluate_fidelity([case], twin, runner=mock_runner)
         assert len(evaluation.case_details) == 1
         detail = evaluation.case_details[0]
         assert detail.case_id == "c-test"

@@ -38,7 +38,6 @@ class SituationFeatureVector(BaseModel):
 class SituationFrame(BaseModel):
     frame_id: str = Field(min_length=1)
     domain_activation_vector: Dict[DomainEnum, float] = Field(
-        min_length=1,
         description="Map of domain -> activation weight (0-1).",
     )
     situation_feature_vector: SituationFeatureVector

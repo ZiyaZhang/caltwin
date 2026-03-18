@@ -43,7 +43,7 @@ def sample_payload():
     eval_.evaluation_id = "ev-1"
     twin = MagicMock()
     twin.state_version = "v002"
-    twin.id = "twin-ziya"
+    twin.id = "twin-default"
     return DashboardPayload(
         fidelity_score=score, evaluation=eval_, twin=twin,
     )
@@ -114,7 +114,7 @@ class TestDashboardGeneration:
                 supporting_case_ids=["c1", "c2", "c3"], sample_size=3,
                 bias_strength=0.67, llm_analysis="test",
                 status=DetectedBiasStatus.ACCEPTED,
-                reviewed_at=datetime.now(timezone.utc), reviewed_by="user-ziya",
+                reviewed_at=datetime.now(timezone.utc), reviewed_by="user-default",
             ),
         ]
         html = generate_dashboard(sample_payload)
@@ -131,6 +131,6 @@ class TestDashboardCommand:
         from unittest.mock import patch, MagicMock
         with patch("twin_runtime.infrastructure.backends.json_file.calibration_store.CalibrationStore") as MockStore:
             MockStore.return_value.list_fidelity_scores.return_value = []
-            dashboard_command(output="/tmp/test_no_scores.html")
+            dashboard_command(store_dir="/tmp/fake_store", user_id="test-user", output="/tmp/test_no_scores.html")
             captured = capsys.readouterr()
             assert "No fidelity scores" in captured.out
