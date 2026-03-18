@@ -77,7 +77,7 @@ Parameters stored in **app config** (not TwinState). First version uses fixed de
 
 ### 3.3 CalibrationCase Temporal Field
 
-Add to `CalibrationCase`:
+Add to both `CalibrationCase` and `CandidateCalibrationCase`:
 
 ```python
 decision_occurred_at: Optional[datetime] = Field(
@@ -86,6 +86,8 @@ decision_occurred_at: Optional[datetime] = Field(
     "Decay uses this if available, falls back to created_at.",
 )
 ```
+
+Adding to `CandidateCalibrationCase` ensures the temporal signal survives promotion to `CalibrationCase`.
 
 Age computation:
 ```python
@@ -105,25 +107,35 @@ contradiction_discount: Optional[float] = Field(
 )
 ```
 
-Added to both CalibrationCase and EvidenceFragment. **Not computed in 5c** — always None.
+Added to CalibrationCase only. **Not computed in 5c** — always None.
+
+**Relationship to existing `EvidenceFragment.temporal_weight`:** The existing `temporal_weight` field on EvidenceFragment (evidence/base.py:73-77) is a compiler-assigned static weight, not a decay function output. 5c's time decay is computed dynamically from `occurred_at` and `as_of`, producing a separate value. These two weights are independent:
+- `temporal_weight`: static, set at evidence ingestion time by compiler
+- `time_decay_weight()`: dynamic, computed at analysis time from age
+
+5c does NOT modify or deprecate `temporal_weight`. Future phases that want a combined weight can define `final_weight = temporal_weight * time_decay_weight(age) * (contradiction_discount or 1.0)`.
 
 ### 3.5 as_of_time
 
-All decay and drift computations accept `as_of: datetime` parameter. Default: `datetime.now(timezone.utc)`. This enables reproducible replay and testing.
+All **offline** decay, drift, and ontology computations accept `as_of: datetime` parameter. Default: `datetime.now(timezone.utc)`. This enables reproducible replay and testing.
+
+Since decay is not applied in runtime retrieval (§3.6), `RecallQuery` and `evidence_store.query()` do NOT need an `as_of` parameter. The `as_of` contract applies to: `evaluate_fidelity(as_of=...)`, `detect_drift(as_of=...)`, `generate_ontology_report(as_of=...)`.
 
 ### 3.6 Where Decay Is Consumed
 
-**Single owner for evidence recency: `evidence_store.query()`**
+**5c decay is OFFLINE ONLY — zero runtime impact.**
 
-- `JsonFileEvidenceStore.query()` applies decay weight to relevance scoring
-- Planner expresses intent via `RecallQuery.sort_by` and `RecallQuery.time_range`, does NOT compute decay independently
-- No double-counting: planner sets intent, store executes with decay
+Decay is NOT applied in `evidence_store.query()` or any runtime retrieval path. This preserves the "zero runtime impact" gate. Runtime retrieval continues to use `RecallQuery.sort_by` and `RecallQuery.time_range` without decay weighting.
 
-**Fidelity evaluator: weighted metrics**
+Decay is consumed in these offline paths only:
 
-- `evaluate_fidelity()` computes both raw and weighted metrics
-- Weighted metrics use `time_decay_weight(case_age_days(case, as_of), half_life, floor)` per case
-- All raw metrics remain unchanged for backward compat
+1. **Fidelity evaluator (weighted metrics):** `evaluate_fidelity()` computes both raw and weighted metrics. Weighted metrics use `time_decay_weight(case_age_days(case, as_of), half_life, floor)` per case. All raw metrics remain unchanged for backward compat.
+
+2. **Drift detector:** Uses decay weights to compute weighted distributions for JSD/effect-size comparison.
+
+3. **Shadow ontology:** Uses decayed support counts for stability assessment.
+
+Future phases may introduce decay into runtime retrieval, but that would be a deliberate "runtime impact" change with its own gate and golden trace regression.
 
 ### 3.7 Weighted Fidelity Metrics
 
@@ -175,10 +187,15 @@ For each domain with sufficient cases:
 
 ### 4.3 Axis-Level Confidence Drift
 
-For each goal_axis appearing in evaluations:
-1. Compute weighted mean utility score in recent vs historical window
-2. Compute **absolute mean delta**
-3. If delta > threshold (e.g., 0.1) → flag as drift signal
+**Data source:** Offline analysis of `RuntimeDecisionTrace` loaded from TraceStore (not TwinEvaluation). Each trace contains `head_assessments` with `utility_decomposition` per axis per domain. This is the only place axis-level scores are stored.
+
+For each goal_axis appearing across traces:
+1. Load traces from TraceStore, group by time window
+2. Compute weighted mean utility score per axis in recent vs historical window
+3. Compute **absolute mean delta**
+4. If delta > threshold (e.g., 0.1) → flag as drift signal
+
+Note: `TwinEvaluation` and `EvaluationCaseDetail` do not store per-axis utility scores. Axis drift detection must go through traces, not evaluation summaries.
 
 ### 4.4 Drift Detection Interface
 
@@ -198,7 +215,7 @@ def detect_drift(
 
 ### 4.5 Storage
 
-Drift reports stored at `~/.twin-runtime/store/{user_id}/drift/{report_id}.json`.
+Drift reports stored at `{store_dir}/{user_id}/drift/{report_id}.json`. Path is injected from CLI config (composition root pattern, same as 5a dashboard fix). Application layer does NOT hardcode `~/.twin-runtime/`.
 
 ### 4.6 CLI Command
 
@@ -217,15 +234,22 @@ For each CalibrationCase, build a text document:
 ```
 {case.observed_context}
 {case.actual_reasoning_if_known or ""}
-{trace.final_decision if linked}
-{evidence_summaries if linked}
-stakes:{case.stakes.value} option_structure:{...}
-decision_mode:{trace.decision_mode.value if linked}
-refusal_reason_code:{trace.refusal_reason_code if linked}
-route_path:{trace.route_path if linked}
+stakes:{case.stakes.value} reversibility:{case.reversibility.value}
+domain:{case.domain_label.value} task_type:{case.task_type}
 ```
 
-Structural tokens are appended as words to participate in TF-IDF.
+**Optional linked trace enrichment:** CalibrationCase currently has no `trace_id` field (linkage is lost during promotion from CandidateCalibrationCase). If a trace can be found by matching `observed_context` or by future trace_id linkage, append:
+
+```
+decision_mode:{trace.decision_mode.value}
+refusal_reason_code:{trace.refusal_reason_code}
+route_path:{trace.route_path}
+{trace.final_decision}
+```
+
+**First version:** Document builder uses CalibrationCase fields only. Trace enrichment is best-effort — if no trace found, the document is still useful for clustering. This avoids depending on linkage that doesn't reliably exist yet.
+
+Structural tokens (stakes, domain, task_type, etc.) are appended as words to participate in TF-IDF.
 
 ### 5.3 Vectorization
 
