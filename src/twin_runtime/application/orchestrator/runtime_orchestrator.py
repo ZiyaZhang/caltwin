@@ -71,6 +71,7 @@ def run(
             llm=llm, evidence_store=evidence_store,
             guard_result=guard_result,
             max_iterations=max_deliberation_rounds,
+            micro_calibrate=micro_calibrate,
         )
 
     else:

@@ -73,6 +73,7 @@ def deliberation_loop(
     evidence_store: Optional[EvidenceStore] = None,
     guard_result: Optional[ScopeGuardResult] = None,
     max_iterations: int = 2,
+    micro_calibrate: bool = False,
 ) -> RuntimeDecisionTrace:
     """Run bounded deliberation: initial pass + up to max_iterations rounds."""
     seen_hashes: Set[str] = set()
@@ -181,5 +182,10 @@ def deliberation_loop(
         trace.decision_mode = DecisionMode.REFUSED
         trace.refusal_reason_code = "INSUFFICIENT_EVIDENCE"
         trace.final_decision = "Insufficient evidence to resolve conflicting assessments."
+
+    # Micro-calibration (same as single_pass, preserves backward compat for S2 path)
+    if micro_calibrate:
+        from twin_runtime.application.calibration.micro_calibration import recalibrate_confidence
+        trace.pending_calibration_update = recalibrate_confidence(trace, twin)
 
     return trace

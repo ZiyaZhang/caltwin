@@ -50,7 +50,9 @@ def execute_from_frame_once(
         from dataclasses import asdict
         trace.scope_guard_result = asdict(guard_result)
 
-    # Refusal reason code (precedence: don't overwrite existing)
+    # Refusal reason code: only assign scope/guard-derived reasons here.
+    # LOW_RELIABILITY is handled by orchestrator's explicit post-execution rule.
+    # Do NOT default unclassified refusals to LOW_RELIABILITY — orchestrator owns that.
     if trace.refusal_reason_code is None:
         if trace.decision_mode == DecisionMode.REFUSED:
             if guard_result and getattr(guard_result, 'restricted_hit', False):
@@ -59,8 +61,7 @@ def execute_from_frame_once(
                 trace.refusal_reason_code = "NON_MODELED"
             elif frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
                 trace.refusal_reason_code = "OUT_OF_SCOPE"
-            else:
-                trace.refusal_reason_code = "LOW_RELIABILITY"
+            # No else fallback — orchestrator handles remaining classification
         elif trace.decision_mode == DecisionMode.DEGRADED:
             trace.refusal_reason_code = "DEGRADED_SCOPE"
 
