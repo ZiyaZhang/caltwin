@@ -28,7 +28,7 @@
   },
   "expected": {
     "decision_mode": "degraded",
-    "refusal_reason_code": "DEGRADED_SCOPE",
+    "refusal_reason_code": "NON_MODELED_PARTIAL",
     "route_path": "s1_direct",
     "boundary_policy": "force_degrade",
     "expected_top_choice": "Modern minimalist"

@@ -182,6 +182,7 @@ def deliberation_loop(
         trace.decision_mode = DecisionMode.REFUSED
         trace.refusal_reason_code = "INSUFFICIENT_EVIDENCE"
         trace.refusal_or_degrade_reason = "insufficient_evidence_after_deliberation"
+        trace.uncertainty = 1.0
         trace.final_decision = "Insufficient evidence to resolve conflicting assessments."
         trace.output_text = (
             "After deliberation, I don't have enough evidence to give a reliable answer "

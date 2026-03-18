@@ -259,3 +259,94 @@ class TestS2MicroCalibrate:
         assert trace.route_path == "s2_deliberate"
         assert trace.pending_calibration_update is not None, \
             "S2 path with micro_calibrate=True must produce pending_calibration_update"
+
+
+# ---------------------------------------------------------------------------
+# Output consistency tests for post-policy mode changes
+# ---------------------------------------------------------------------------
+
+class TestDegradedOutputConsistency:
+    """FORCE_DEGRADE must sync final_decision AND output_text with degraded mode."""
+
+    def test_degraded_final_decision_has_caveat(self):
+        """final_decision must include degraded caveat when FORCE_DEGRADE applied."""
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run
+
+        twin = TwinState(**json.loads(
+            Path("tests/fixtures/sample_twin_state.json").read_text()
+        ))
+        # Use the low_reliability case which triggers BORDERLINE → FORCE_DEGRADE
+        case = json.loads(
+            (GOLDEN_DIR / "refuse_low_reliability.json").read_text()
+        )
+        llm = ScriptedLLM(case["llm_script"])
+        trace = run(query=case["query"], option_set=case["option_set"], twin=twin, llm=llm)
+
+        assert trace.decision_mode.value == "degraded"
+        assert "[Degraded confidence]" in trace.final_decision, \
+            "final_decision must include degraded caveat"
+        assert trace.output_text is not None
+        assert "[Degraded confidence]" in trace.output_text, \
+            "output_text must include degraded caveat"
+
+    def test_non_modeled_partial_has_specific_reason(self):
+        """non_modeled_partial route should produce NON_MODELED_PARTIAL reason code."""
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run
+        from twin_runtime.application.pipeline.scope_guard import ScopeGuardResult
+        from unittest.mock import patch
+
+        twin = TwinState(**json.loads(
+            Path("tests/fixtures/sample_twin_state.json").read_text()
+        ))
+        case = json.loads(
+            (GOLDEN_DIR / "s1_direct_simple.json").read_text()
+        )
+        llm = ScriptedLLM(case["llm_script"])
+
+        # Patch scope guard to return non_modeled_hit with activation present
+        mock_guard = ScopeGuardResult(non_modeled_hit=True, matched_terms=["non_modeled:x=y"])
+        with patch("twin_runtime.application.orchestrator.runtime_orchestrator.interpret_situation") as mock_interp:
+            from twin_runtime.domain.models.situation import SituationFrame, SituationFeatureVector
+            from twin_runtime.domain.models.primitives import (
+                DomainEnum, ScopeStatus, OrdinalTriLevel, UncertaintyType, OptionStructure,
+            )
+            frame = SituationFrame(
+                frame_id="test",
+                domain_activation_vector={DomainEnum.WORK: 0.9},
+                situation_feature_vector=SituationFeatureVector(
+                    reversibility=OrdinalTriLevel.MEDIUM, stakes=OrdinalTriLevel.MEDIUM,
+                    uncertainty_type=UncertaintyType.MIXED, controllability=OrdinalTriLevel.MEDIUM,
+                    option_structure=OptionStructure.CHOOSE_EXISTING,
+                ),
+                ambiguity_score=0.3, scope_status=ScopeStatus.IN_SCOPE, routing_confidence=0.8,
+            )
+            mock_interp.return_value = (frame, mock_guard)
+            trace = run(query=case["query"], option_set=case["option_set"], twin=twin, llm=llm)
+
+        assert trace.decision_mode.value == "degraded"
+        assert trace.refusal_reason_code == "NON_MODELED_PARTIAL"
+        assert trace.refusal_or_degrade_reason == "non_modeled_partial"
+
+
+class TestInsufficientEvidenceOutputConsistency:
+    """INSUFFICIENT_EVIDENCE must have uncertainty=1.0 and honest output_text."""
+
+    def test_insufficient_evidence_uncertainty_is_max(self):
+        case = json.loads(
+            (GOLDEN_DIR / "refuse_insufficient_evidence.json").read_text()
+        )
+        from twin_runtime.domain.models.twin_state import TwinState
+        from twin_runtime.application.orchestrator.runtime_orchestrator import run
+
+        twin = TwinState(**json.loads(Path(case["twin_fixture"]).read_text()))
+        llm = ScriptedLLM(case["llm_script"])
+        trace = run(query=case["query"], option_set=case["option_set"], twin=twin, llm=llm)
+
+        assert trace.decision_mode.value == "refused"
+        assert trace.refusal_reason_code == "INSUFFICIENT_EVIDENCE"
+        assert trace.uncertainty == 1.0, \
+            f"INSUFFICIENT_EVIDENCE must have uncertainty=1.0, got {trace.uncertainty}"
+        assert "enough evidence" in trace.output_text.lower(), \
+            "output_text must explain insufficient evidence"

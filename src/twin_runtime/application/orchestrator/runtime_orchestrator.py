@@ -83,15 +83,20 @@ def run(
     if (route.boundary_policy == BoundaryPolicy.FORCE_DEGRADE
             and trace.decision_mode != DecisionMode.REFUSED):
         trace.decision_mode = DecisionMode.DEGRADED
-        if trace.refusal_reason_code is None:
+        # Determine specific degrade reason from route
+        degrade_reason = "borderline_scope"
+        if "non_modeled_partial" in route.reason_codes:
+            degrade_reason = "non_modeled_partial"
+            trace.refusal_reason_code = "NON_MODELED_PARTIAL"
+        elif trace.refusal_reason_code is None:
             trace.refusal_reason_code = "DEGRADED_SCOPE"
-        # Sync output_text with degraded mode — prepend caveat
-        trace.refusal_or_degrade_reason = "borderline_scope"
-        if trace.output_text and not trace.output_text.startswith("[Degraded confidence]"):
-            trace.output_text = (
-                "[Degraded confidence] This response is outside the twin's strongest domains. "
-                "Treat as a weak signal.\n\n" + trace.output_text
-            )
+        trace.refusal_or_degrade_reason = degrade_reason
+        # Sync BOTH final_decision and output_text
+        caveat = "[Degraded confidence] This response is outside the twin's strongest domains. Treat as a weak signal."
+        if not trace.final_decision.startswith("[Degraded"):
+            trace.final_decision = f"{caveat}\n{trace.final_decision}"
+        if trace.output_text and not trace.output_text.startswith("[Degraded"):
+            trace.output_text = f"{caveat}\n\n{trace.output_text}"
 
     # 8. Populate routing metadata
     trace.route_path = route.execution_path.value
