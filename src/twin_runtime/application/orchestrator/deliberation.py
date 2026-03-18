@@ -171,8 +171,11 @@ def deliberation_loop(
     trace.terminated_by = termination.value if termination else None
     trace.deliberation_round_summaries = [s.model_dump() for s in round_summaries]
 
-    # Post-loop abstention: evidence saturated + conflict unresolved -> INSUFFICIENT_EVIDENCE
-    if (termination in (TerminationReason.NO_NEW_EVIDENCE, TerminationReason.MAX_ITERATIONS)
+    # Post-loop abstention: unresolved conflict after exhaustion → INSUFFICIENT_EVIDENCE
+    # Applies to NO_NEW_EVIDENCE, MAX_ITERATIONS, and CONFIDENCE_PLATEAU when conflict persists
+    if (termination in (TerminationReason.NO_NEW_EVIDENCE,
+                        TerminationReason.MAX_ITERATIONS,
+                        TerminationReason.CONFIDENCE_PLATEAU)
             and conflict is not None
             and not conflict.resolvable_by_system):
         trace.decision_mode = DecisionMode.REFUSED

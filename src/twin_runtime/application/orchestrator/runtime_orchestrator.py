@@ -91,17 +91,17 @@ def run(
     trace.boundary_policy = route.boundary_policy.value
     trace.shadow_scores = route.shadow_scores
 
-    # 9. Refusal reason code precedence: don't overwrite existing
-    if trace.refusal_reason_code is None:
-        _assign_refusal_reason(trace, frame, guard_result)
-
-    # 10. LOW_RELIABILITY post-execution rule
+    # 9. LOW_RELIABILITY post-execution rule (must run BEFORE generic assignment)
     if (trace.decision_mode == DecisionMode.REFUSED
             and len(trace.head_assessments) == 0
             and trace.skipped_domains
             and all("reliability" in reason.lower() for reason in trace.skipped_domains.values())
             and trace.refusal_reason_code is None):
         trace.refusal_reason_code = "LOW_RELIABILITY"
+
+    # 10. Generic refusal reason assignment (only if still None after specific rules)
+    if trace.refusal_reason_code is None:
+        _assign_refusal_reason(trace, frame, guard_result)
 
     return trace
 
@@ -148,7 +148,11 @@ def _determine_refusal_code(route, guard_result, frame) -> str:
 
 
 def _assign_refusal_reason(trace, frame, guard_result):
-    """Generic refusal reason assignment (only if not already set)."""
+    """Generic refusal reason assignment (only if not already set).
+
+    LOW_RELIABILITY is NOT assigned here — it has its own explicit rule above.
+    This function only assigns scope/guard-derived reasons.
+    """
     if trace.decision_mode == DecisionMode.REFUSED:
         if guard_result and getattr(guard_result, 'restricted_hit', False):
             trace.refusal_reason_code = "POLICY_RESTRICTED"
@@ -156,10 +160,11 @@ def _assign_refusal_reason(trace, frame, guard_result):
             trace.refusal_reason_code = "NON_MODELED"
         elif frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
             trace.refusal_reason_code = "OUT_OF_SCOPE"
-        else:
-            trace.refusal_reason_code = "LOW_RELIABILITY"
+        # No else fallback — if none of the above match and refusal_reason_code
+        # is still None, it stays None (indicates an unclassified refusal).
     elif trace.decision_mode == DecisionMode.DEGRADED:
-        trace.refusal_reason_code = "DEGRADED_SCOPE"
+        if trace.refusal_reason_code is None:
+            trace.refusal_reason_code = "DEGRADED_SCOPE"
 
 
 def _guard_to_dict(guard_result):

@@ -69,12 +69,17 @@ class ScriptedLLM:
         return {}
 
     def _maybe_advance_round(self):
-        """Auto-advance round when all head_assess keys for current round are consumed."""
+        """Auto-advance round when all head_assess domains for current round are consumed."""
         round_key = f"round_{self._current_round}"
         if round_key not in self._script:
             return
-        expected_heads = {k for k in self._script[round_key] if k.startswith("head_assess_")}
-        if expected_heads and self._heads_served_this_round >= expected_heads:
+        # Extract domain names from keys like "head_assess_work" → "work"
+        expected_domains = {
+            k.replace("head_assess_", "")
+            for k in self._script[round_key]
+            if k.startswith("head_assess_")
+        }
+        if expected_domains and self._heads_served_this_round >= expected_domains:
             self._current_round += 1
             self._heads_served_this_round.clear()
 
