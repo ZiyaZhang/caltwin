@@ -346,7 +346,7 @@ detail = EvaluationCaseDetail(
 - **CF (Choice Fidelity):** `weighted_avg = sum(choice_score * w) / sum(w)` instead of `sum(choice_score) / N`
 - **RF (Reasoning Fidelity):** same weighted average, only over details with non-None reasoning_score
 - **CQ (Calibration Quality / ECE):** bin assignment unchanged, but within each bin: `avg_conf = sum(conf * w) / sum(w)`, `accuracy = sum(correct * w) / sum(w)`, `bin_ece = |avg_conf - accuracy| * sum(w) / total_w`
-- **TS (Temporal Stability):** uses `evaluation.weighted_choice_similarity` (from current and historical evaluations) instead of raw `choice_similarity`
+- **TS (Temporal Stability):** uses weighted choice similarity series. **Fallback for pre-5c evaluations:** `series_value = ev.weighted_choice_similarity if ev.weighted_choice_similarity is not None else ev.choice_similarity`. This ensures backward compat with historical evaluations that don't have weighted fields.
 
 - [ ] **Step 5: Wire weighted score into cmd_evaluate and dashboard**
 
@@ -354,7 +354,8 @@ In `cli.py:cmd_evaluate()`, after saving evaluation:
 ```python
 from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
 
-historical_evaluations = cal_store.list_evaluations()
+# Exclude current evaluation from historical to avoid double-counting in TS
+historical_evaluations = [e for e in cal_store.list_evaluations() if e.evaluation_id != evaluation.evaluation_id]
 # Raw score
 raw_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
 # Weighted score
@@ -364,9 +365,9 @@ print(f"Weighted CF: {weighted_score.choice_fidelity.value:.3f} (raw: {raw_score
 ```
 
 **Dashboard wiring:** Add `application/dashboard/cli.py`, `application/dashboard/payload.py`, `application/dashboard/generator.py`, and `tests/test_dashboard.py` to the file list. Dashboard computes raw and weighted scores on-the-fly:
-- `dashboard_command()` loads latest `TwinEvaluation` + `historical_evaluations`
-- Calls `compute_fidelity_score(evaluation, historical_evaluations=..., weighted=False)` for raw
-- Calls `compute_fidelity_score(evaluation, historical_evaluations=..., weighted=True)` for weighted
+- `dashboard_command()` loads latest `TwinEvaluation` + `historical_evaluations` (excluding current to avoid TS double-count)
+- Calls `compute_fidelity_score(evaluation, historical_evaluations=historical, weighted=False)` for raw
+- Calls `compute_fidelity_score(evaluation, historical_evaluations=historical, weighted=True)` for weighted
 - `DashboardPayload` gets two score fields: `raw_fidelity_score` and `weighted_fidelity_score`
 - `generator.py` renders both side by side (weighted as primary, raw as comparison)
 
@@ -586,10 +587,11 @@ Groups cases by parent domain, clusters within each, assesses stability, assembl
 
 - [ ] **Step 1: Add `[analysis]` optional dependency**
 
+Add to the existing `[project.optional-dependencies]` section (which already has `dev` and `google`):
 ```toml
-[project.optional-dependencies]
 analysis = ["scikit-learn>=1.3"]
 ```
+Do NOT replace the existing extras — append this line alongside `dev = [...]` and `google = [...]`.
 
 - [ ] **Step 2: Add `drift-report` command**
 
