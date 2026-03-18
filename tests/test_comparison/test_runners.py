@@ -12,6 +12,11 @@ from twin_runtime.application.comparison.runners.vanilla import (
     _fuzzy_match,
     parse_choice,
 )
+from twin_runtime.application.comparison.runners.persona import (
+    PersonaRunner,
+    build_persona_system_prompt,
+)
+from twin_runtime.application.comparison.runners.rag_persona import RagPersonaRunner
 from twin_runtime.application.comparison.schemas import ComparisonScenario
 
 
@@ -106,3 +111,76 @@ class TestVanillaRunner:
         twin = MagicMock()
         out = r.run_scenario(scenario, twin)
         assert out.chosen == "Accept"
+
+
+class TestBuildPersonaPrompt:
+    def test_no_raw_numbers(self, sample_twin):
+        prompt = build_persona_system_prompt(sample_twin)
+        # Should contain labels like "moderate", "high", "low" but NOT raw floats
+        assert "risk tolerance" in prompt
+        assert "conflict style" in prompt
+        # No raw axis numbers should appear (e.g. "0.72")
+        import re
+        floats = re.findall(r"\b0\.\d+\b", prompt)
+        assert floats == [], f"Found raw numbers in prompt: {floats}"
+
+    def test_includes_domains(self, sample_twin):
+        prompt = build_persona_system_prompt(sample_twin)
+        assert "work" in prompt.lower()
+
+    def test_includes_control_orientation(self, sample_twin):
+        prompt = build_persona_system_prompt(sample_twin)
+        assert "control orientation" in prompt
+
+
+class TestPersonaRunner:
+    def test_runner_id(self):
+        llm = MagicMock()
+        r = PersonaRunner(llm)
+        assert r.runner_id == "persona"
+
+    def test_run_uses_persona_system(self, sample_twin):
+        llm = MagicMock()
+        llm.ask_text.return_value = '{"chosen": "Accept"}'
+        r = PersonaRunner(llm)
+        scenario = _make_scenario()
+        out = r.run_scenario(scenario, sample_twin)
+        assert out.is_correct is True
+        # Verify system prompt was persona-based
+        call_args = llm.ask_text.call_args
+        system = call_args[0][0]
+        assert "decision-making twin" in system
+
+
+class TestRagPersonaRunner:
+    def test_runner_id(self):
+        llm = MagicMock()
+        store = MagicMock()
+        r = RagPersonaRunner(llm, store)
+        assert r.runner_id == "rag_persona"
+
+    def test_degradation_when_empty_store(self, sample_twin):
+        llm = MagicMock()
+        llm.ask_text.return_value = '{"chosen": "Accept"}'
+        store = MagicMock()
+        store.query.return_value = []
+        r = RagPersonaRunner(llm, store)
+        scenario = _make_scenario()
+        out = r.run_scenario(scenario, sample_twin)
+        assert out.notes == "degraded:no_evidence"
+        assert out.is_correct is True
+
+    def test_evidence_included_in_prompt(self, sample_twin):
+        llm = MagicMock()
+        llm.ask_text.return_value = '{"chosen": "Accept"}'
+        frag = MagicMock()
+        frag.summary = "User previously chose stability over risk"
+        store = MagicMock()
+        store.query.return_value = [frag]
+        r = RagPersonaRunner(llm, store)
+        scenario = _make_scenario()
+        out = r.run_scenario(scenario, sample_twin)
+        assert out.notes == ""
+        call_args = llm.ask_text.call_args
+        system = call_args[0][0]
+        assert "stability over risk" in system
