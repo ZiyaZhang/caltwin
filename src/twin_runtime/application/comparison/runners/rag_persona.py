@@ -57,7 +57,7 @@ class RagPersonaRunner(BaseRunner):
 
         user_prompt = _build_user_prompt(scenario.query, scenario.options)
         t0 = time.monotonic()
-        raw = self._llm.ask_text(system, user_prompt, max_tokens=256)
+        raw = self._llm.ask_text(system, user_prompt, max_tokens=256, temperature=0)
         latency_ms = (time.monotonic() - t0) * 1000
 
         chosen = parse_choice(raw, scenario.options)

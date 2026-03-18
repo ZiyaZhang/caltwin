@@ -77,23 +77,31 @@ def _compute_aggregates(
     cf_scores: Dict[str, float] = {}
 
     for runner_id, outputs in all_outputs.items():
-        total = len(outputs)
-        correct = sum(1 for o in outputs if o.is_correct)
+        # For non-twin runners, exclude REFUSE scenarios from CF calculation
+        # (baselines can't refuse — counting them would structurally inflate uplift)
+        is_twin = runner_id == "twin"
+        scorable = [
+            o for o in outputs
+            if is_twin or scenarios_by_id.get(o.scenario_id) is None
+            or scenarios_by_id[o.scenario_id].ground_truth != "REFUSE"
+        ]
+        total = len(scorable)
+        correct = sum(1 for o in scorable if o.is_correct)
         cf_score = correct / total if total > 0 else 0.0
         cf_scores[runner_id] = cf_score
 
-        confidences = [o.confidence for o in outputs if o.confidence > 0]
-        mean_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        uncertainties = [o.uncertainty for o in outputs if o.uncertainty > 0]
+        mean_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else 0.0
 
         latencies = [o.latency_ms for o in outputs if o.latency_ms > 0]
         mean_latency = sum(latencies) / len(latencies) if latencies else 0.0
 
-        domain_breakdown = _compute_domain_breakdown(outputs, scenarios_by_id)
+        domain_breakdown = _compute_domain_breakdown(outputs, scenarios_by_id, exclude_refuse=not is_twin)
 
         aggregates[runner_id] = AggregateMetrics(
             runner_id=runner_id,
             cf_score=cf_score,
-            mean_confidence=mean_confidence,
+            mean_uncertainty=mean_uncertainty,
             mean_latency_ms=mean_latency,
             total=total,
             correct=correct,
@@ -114,12 +122,15 @@ def _compute_aggregates(
 def _compute_domain_breakdown(
     outputs: List[RunnerOutput],
     scenarios_by_id: dict,
+    exclude_refuse: bool = False,
 ) -> List[DomainBreakdown]:
     """Group outputs by domain and compute per-domain CF."""
     domain_groups: Dict[str, List[RunnerOutput]] = defaultdict(list)
     for o in outputs:
         scenario = scenarios_by_id.get(o.scenario_id)
         if scenario:
+            if exclude_refuse and scenario.ground_truth == "REFUSE":
+                continue
             domain_groups[scenario.domain].append(o)
 
     breakdowns = []

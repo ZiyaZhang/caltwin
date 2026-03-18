@@ -215,11 +215,12 @@ class TestIsRefusal:
         trace.refusal_reason_code = None
         assert _is_refusal(trace) is True
 
-    def test_degraded_mode(self):
+    def test_degraded_mode_is_not_refusal(self):
+        """DEGRADED still produces a decision (weak signal) — not a true refusal."""
         trace = MagicMock()
         trace.decision_mode.value = "degraded"
         trace.refusal_reason_code = None
-        assert _is_refusal(trace) is True
+        assert _is_refusal(trace) is False
 
     def test_direct_with_refusal_code(self):
         trace = MagicMock()

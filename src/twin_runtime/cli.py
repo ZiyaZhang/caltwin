@@ -910,9 +910,14 @@ def cmd_compare(args):
     from twin_runtime.interfaces.defaults import DefaultLLM
 
     twin = _require_twin(config, demo=demo)
-    user_id = config.get("user_id", "default")
     llm = DefaultLLM()
-    evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+    if demo:
+        # Demo mode: use isolated temp dir so sample twin doesn't mix with real evidence
+        import tempfile
+        evidence_store = JsonFileEvidenceStore(tempfile.mkdtemp())
+    else:
+        user_id = config.get("user_id", "default")
+        evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
 
     # Build runners
     available = {
@@ -930,7 +935,13 @@ def cmd_compare(args):
     if args.scenarios:
         scenario_path = Path(args.scenarios)
     else:
-        scenario_path = Path(__file__).resolve().parent.parent.parent / "tests" / "fixtures" / "comparison" / "fixtures.json"
+        import importlib.resources as pkg_resources
+        ref = pkg_resources.files("twin_runtime") / "resources" / "fixtures" / "comparison_scenarios.json"
+        # Write to a temp path so ScenarioSet.load() works uniformly
+        import tempfile
+        tmp = Path(tempfile.mktemp(suffix=".json"))
+        tmp.write_text(ref.read_text())
+        scenario_path = tmp
     scenario_set = executor.load_scenarios(scenario_path)
 
     # Progress
@@ -980,13 +991,14 @@ def _print_comparison_table(report):
         return
 
     # Header
-    print(f"\n{'Runner':<15} {'CF Score':>10} {'Correct':>10} {'Confidence':>12} {'Latency(ms)':>12}")
+    print(f"\n{'Runner':<15} {'CF Score':>10} {'Correct':>10} {'Uncertainty':>12} {'Latency(ms)':>12}")
     print("-" * 62)
 
     best_cf = max(a.cf_score for a in aggs.values())
     for rid, agg in sorted(aggs.items()):
         marker = " *" if agg.cf_score == best_cf else ""
-        print(f"{rid:<15} {agg.cf_score:>10.2%} {agg.correct}/{agg.total:>7} {agg.mean_confidence:>12.3f} {agg.mean_latency_ms:>12.0f}{marker}")
+        unc = f"{agg.mean_uncertainty:.3f}" if agg.mean_uncertainty > 0 else "-"
+        print(f"{rid:<15} {agg.cf_score:>10.2%} {agg.correct}/{agg.total:>7} {unc:>12} {agg.mean_latency_ms:>12.0f}{marker}")
 
     # Pairwise deltas
     print(f"\n{'Pairwise Deltas':}")

@@ -73,7 +73,7 @@ class AggregateMetrics(BaseModel):
 
     runner_id: str
     cf_score: float = Field(ge=0.0, le=1.0)
-    mean_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    mean_uncertainty: float = Field(default=0.0, ge=0.0, le=1.0)
     mean_latency_ms: float = Field(default=0.0, ge=0.0)
     total: int = 0
     correct: int = 0

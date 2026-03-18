@@ -7,19 +7,19 @@ this module provides the concrete defaults.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class DefaultLLM:
     """Adapts infrastructure.llm.client functions to LLMPort protocol."""
 
-    def ask_json(self, system: str, user: str, max_tokens: int = 1024) -> Dict[str, Any]:
+    def ask_json(self, system: str, user: str, max_tokens: int = 1024, *, temperature: Optional[float] = None) -> Dict[str, Any]:
         from twin_runtime.infrastructure.llm.client import ask_json
-        return ask_json(system, user, max_tokens=max_tokens)
+        return ask_json(system, user, max_tokens=max_tokens, temperature=temperature)
 
-    def ask_text(self, system: str, user: str, max_tokens: int = 1024) -> str:
+    def ask_text(self, system: str, user: str, max_tokens: int = 1024, *, temperature: Optional[float] = None) -> str:
         from twin_runtime.infrastructure.llm.client import ask_text
-        return ask_text(system, user, max_tokens=max_tokens)
+        return ask_text(system, user, max_tokens=max_tokens, temperature=temperature)
 
     def ask_structured(
         self,

@@ -26,7 +26,7 @@ def _make_report():
             "vanilla": AggregateMetrics(
                 runner_id="vanilla",
                 cf_score=0.5,
-                mean_confidence=0.7,
+                mean_uncertainty=0.7,
                 mean_latency_ms=125,
                 total=2,
                 correct=1,
@@ -39,7 +39,7 @@ def _make_report():
             "twin": AggregateMetrics(
                 runner_id="twin",
                 cf_score=1.0,
-                mean_confidence=0.9,
+                mean_uncertainty=0.9,
                 mean_latency_ms=225,
                 total=2,
                 correct=2,

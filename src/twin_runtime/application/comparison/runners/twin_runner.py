@@ -68,11 +68,15 @@ class TwinRunner(BaseRunner):
 
 
 def _is_refusal(trace) -> bool:
-    """Check if trace represents a refusal/degradation."""
-    return (
-        trace.decision_mode.value in ("refused", "degraded")
-        or trace.refusal_reason_code is not None
-    )
+    """Check if trace represents a genuine refusal (not degraded).
+
+    DEGRADED still produces a decision (weak signal), so it's not a true refusal.
+    Only REFUSED mode counts as abstention for REFUSE scenario scoring.
+    """
+    if trace.decision_mode.value == "refused":
+        return True
+    # Also check explicit out-of-scope refusal codes even if mode isn't "refused"
+    return trace.refusal_reason_code in ("OUT_OF_SCOPE", "POLICY_RESTRICTED")
 
 
 def _extract_chosen(trace, options: List[str]) -> str:
