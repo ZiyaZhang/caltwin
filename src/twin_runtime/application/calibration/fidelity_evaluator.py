@@ -23,6 +23,12 @@ from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, unce
 from twin_runtime.domain.models.twin_state import TwinState
 
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
+from twin_runtime.application.calibration.time_decay import (
+    calibration_decay_weight,
+    case_age_days,
+    CALIBRATION_HALF_LIFE,
+    CALIBRATION_FLOOR,
+)
 
 PipelineRunner = Callable[..., RuntimeDecisionTrace]
 
@@ -220,6 +226,8 @@ def evaluate_fidelity(
     error_count = 0
     failed_case_ids: list[str] = []
 
+    as_of = datetime.now(timezone.utc)
+
     for case in cases:
         try:
             result = evaluate_single_case(case, twin, runner=runner)
@@ -230,6 +238,9 @@ def evaluate_fidelity(
             failed_case_ids.append(case.case_id)
             print(f"  ERROR on case {case.case_id}: {e}")
             continue  # Skip - don't add 0.0 to scores
+
+        # Compute time-decay weight for this case
+        decay_w = calibration_decay_weight(case_age_days(case, as_of))
 
         choice_scores.append(result.choice_score)
         if case.expect_abstention:
@@ -265,10 +276,11 @@ def evaluate_fidelity(
             actual_choice=case.actual_choice,
             confidence_at_prediction=result.confidence_at_prediction,
             residual_direction=residual_direction,
+            time_decay_weight=decay_w,
         )
         case_details.append(detail)
 
-    # Aggregate
+    # Aggregate (raw / uniform)
     avg_choice = sum(choice_scores) / len(choice_scores) if choice_scores else 0.0
     avg_reasoning = (
         sum(reasoning_scores) / len(reasoning_scores) if reasoning_scores else None
@@ -277,6 +289,29 @@ def evaluate_fidelity(
     domain_reliability = {
         d: sum(scores) / len(scores) for d, scores in domain_scores.items()
     }
+
+    # Weighted aggregation from case_details
+    total_w = sum(d.time_decay_weight for d in case_details)
+    if total_w > 0:
+        weighted_choice = sum(d.choice_score * d.time_decay_weight for d in case_details) / total_w
+        reasoning_details = [d for d in case_details if d.reasoning_score is not None]
+        r_w = sum(d.time_decay_weight for d in reasoning_details)
+        weighted_reasoning = (
+            sum(d.reasoning_score * d.time_decay_weight for d in reasoning_details) / r_w
+            if r_w > 0 else None
+        )
+        weighted_domain_rel: Dict[str, float] = {}
+        for d_name in set(d.domain.value for d in case_details):
+            d_recs = [d for d in case_details if d.domain.value == d_name]
+            dw = sum(r.time_decay_weight for r in d_recs)
+            if dw > 0:
+                weighted_domain_rel[d_name] = sum(
+                    r.choice_score * r.time_decay_weight for r in d_recs
+                ) / dw
+    else:
+        weighted_choice = avg_choice
+        weighted_reasoning = avg_reasoning
+        weighted_domain_rel = domain_reliability
 
     # Compute abstention accuracy from OOS cases only (expect_abstention=True)
     abstention_acc = compute_abstention_accuracy(oos_decision_modes)
@@ -294,6 +329,14 @@ def evaluate_fidelity(
         failed_case_count=error_count,
         abstention_accuracy=round(abstention_acc, 3) if abstention_acc is not None else None,
         abstention_case_count=abstention_count,
+        weighted_choice_similarity=round(weighted_choice, 3),
+        weighted_reasoning_similarity=round(weighted_reasoning, 3) if weighted_reasoning is not None else None,
+        weighted_domain_reliability=weighted_domain_rel,
+        decay_params_used={
+            "half_life": CALIBRATION_HALF_LIFE,
+            "floor": CALIBRATION_FLOOR,
+            "as_of": as_of.isoformat(),
+        },
     )
 
 
@@ -301,31 +344,52 @@ def evaluate_fidelity(
 # Fidelity score computation (CF / RF / CQ / TS)
 # ---------------------------------------------------------------------------
 
-def _compute_choice_fidelity(details: List[EvaluationCaseDetail]) -> FidelityMetric:
-    """Average choice_score; confidence = min(1, n/30)."""
+def _compute_choice_fidelity(
+    details: List[EvaluationCaseDetail], *, weighted: bool = False,
+) -> FidelityMetric:
+    """Average choice_score; confidence = min(1, n/30).
+
+    When weighted=True, uses time_decay_weight for weighted average.
+    """
     n = len(details)
     if n == 0:
         return FidelityMetric(value=0.0, confidence_in_metric=0.0, case_count=0)
-    avg = sum(d.choice_score for d in details) / n
+    if weighted:
+        total_w = sum(d.time_decay_weight for d in details)
+        avg = sum(d.choice_score * d.time_decay_weight for d in details) / total_w if total_w > 0 else 0.0
+    else:
+        avg = sum(d.choice_score for d in details) / n
     confidence = min(1.0, n / 30.0)
     return FidelityMetric(value=avg, confidence_in_metric=confidence, case_count=n)
 
 
-def _compute_reasoning_fidelity(details: List[EvaluationCaseDetail]) -> FidelityMetric:
-    """Average reasoning_score where not None; confidence = min(1, n/20)."""
-    scored = [d.reasoning_score for d in details if d.reasoning_score is not None]
+def _compute_reasoning_fidelity(
+    details: List[EvaluationCaseDetail], *, weighted: bool = False,
+) -> FidelityMetric:
+    """Average reasoning_score where not None; confidence = min(1, n/20).
+
+    When weighted=True, uses time_decay_weight for weighted average.
+    """
+    scored = [d for d in details if d.reasoning_score is not None]
     n = len(scored)
     if n == 0:
         return FidelityMetric(value=0.0, confidence_in_metric=0.0, case_count=0)
-    avg = sum(scored) / n
+    if weighted:
+        total_w = sum(d.time_decay_weight for d in scored)
+        avg = sum(d.reasoning_score * d.time_decay_weight for d in scored) / total_w if total_w > 0 else 0.0
+    else:
+        avg = sum(d.reasoning_score for d in scored) / n
     confidence = min(1.0, n / 20.0)
     return FidelityMetric(value=avg, confidence_in_metric=confidence, case_count=n)
 
 
-def _compute_calibration_quality(details: List[EvaluationCaseDetail]) -> FidelityMetric:
+def _compute_calibration_quality(
+    details: List[EvaluationCaseDetail], *, weighted: bool = False,
+) -> FidelityMetric:
     """ECE bins [0,0.3), [0.3,0.6), [0.6,1.0]; CQ = 1 - ECE.
 
     confidence = min(1, non_empty_bins / 3 * n / 15)
+    When weighted=True, bin statistics use time_decay_weight.
     """
     n = len(details)
     if n == 0:
@@ -339,6 +403,11 @@ def _compute_calibration_quality(details: List[EvaluationCaseDetail]) -> Fidelit
     bins: List[Dict] = []
     total_ece = 0.0
 
+    if weighted:
+        total_w = sum(d.time_decay_weight for d in details)
+    else:
+        total_w = float(n)  # unused in non-weighted path but keeps logic uniform
+
     for low, high in bin_edges:
         bucket = [
             d for d in details
@@ -348,9 +417,21 @@ def _compute_calibration_quality(details: List[EvaluationCaseDetail]) -> Fidelit
         if not bucket:
             bins.append({"range": [low, high], "count": 0, "avg_conf": None, "accuracy": None})
             continue
-        avg_conf = sum(d.confidence_at_prediction for d in bucket) / len(bucket)
-        accuracy = sum(1 for d in bucket if d.choice_score >= 1.0) / len(bucket)
-        bin_ece = abs(avg_conf - accuracy) * len(bucket) / n
+
+        if weighted:
+            bw = sum(d.time_decay_weight for d in bucket)
+            if bw > 0:
+                avg_conf = sum(d.confidence_at_prediction * d.time_decay_weight for d in bucket) / bw
+                accuracy = sum(d.time_decay_weight for d in bucket if d.choice_score >= 1.0) / bw
+            else:
+                avg_conf = 0.0
+                accuracy = 0.0
+            bin_ece = abs(avg_conf - accuracy) * bw / total_w if total_w > 0 else 0.0
+        else:
+            avg_conf = sum(d.confidence_at_prediction for d in bucket) / len(bucket)
+            accuracy = sum(1 for d in bucket if d.choice_score >= 1.0) / len(bucket)
+            bin_ece = abs(avg_conf - accuracy) * len(bucket) / n
+
         total_ece += bin_ece
         bins.append({
             "range": [low, high], "count": len(bucket),
@@ -370,15 +451,23 @@ def _compute_calibration_quality(details: List[EvaluationCaseDetail]) -> Fidelit
 def _compute_temporal_stability(
     current: TwinEvaluation,
     historical: Optional[List[TwinEvaluation]],
+    *,
+    weighted: bool = False,
 ) -> FidelityMetric:
     """CV = std / max(mean, 1e-6); TS = 1 - CV; confidence = min(1, n/5).
 
-    Single eval → value=1.0, confidence=0.0.
+    Single eval -> value=1.0, confidence=0.0.
+    When weighted=True, uses weighted_choice_similarity when available.
     """
     if not historical:
         return FidelityMetric(value=1.0, confidence_in_metric=0.0, case_count=1)
 
-    all_sims = [ev.choice_similarity for ev in historical] + [current.choice_similarity]
+    def _sim(ev: TwinEvaluation) -> float:
+        if weighted and ev.weighted_choice_similarity is not None:
+            return ev.weighted_choice_similarity
+        return ev.choice_similarity
+
+    all_sims = [_sim(ev) for ev in historical] + [_sim(current)]
     n = len(all_sims)
 
     if n < 2:
@@ -396,18 +485,24 @@ def _compute_temporal_stability(
 def compute_fidelity_score(
     evaluation: TwinEvaluation,
     historical_evaluations: Optional[List[TwinEvaluation]] = None,
+    *,
+    weighted: bool = False,
 ) -> TwinFidelityScore:
     """Compute four-metric fidelity decomposition (CF, RF, CQ, TS).
 
     Returns a TwinFidelityScore with choice_fidelity, reasoning_fidelity,
     calibration_quality, temporal_stability, and derived overall_score.
+
+    When weighted=True, all sub-metrics use time_decay_weight from
+    case_details for weighted averaging. Gracefully handles pre-5c
+    evaluations where weighted fields may be None (falls back to uniform).
     """
     details = evaluation.case_details or []
 
-    cf = _compute_choice_fidelity(details)
-    rf = _compute_reasoning_fidelity(details)
-    cq = _compute_calibration_quality(details)
-    ts = _compute_temporal_stability(evaluation, historical_evaluations)
+    cf = _compute_choice_fidelity(details, weighted=weighted)
+    rf = _compute_reasoning_fidelity(details, weighted=weighted)
+    cq = _compute_calibration_quality(details, weighted=weighted)
+    ts = _compute_temporal_stability(evaluation, historical_evaluations, weighted=weighted)
 
     # Overall score: confidence-weighted average of CF and CQ (RF/TS contribute when available)
     weights = [
