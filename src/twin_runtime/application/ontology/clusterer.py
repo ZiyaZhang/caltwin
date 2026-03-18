@@ -31,6 +31,7 @@ def cluster_cases(
 
     vectorizer = TfidfVectorizer(
         tokenizer=_mixed_tokenizer,
+        token_pattern=None,  # Suppress warning: custom tokenizer overrides token_pattern
         ngram_range=(1, 2),
         max_features=500,
         sublinear_tf=True,

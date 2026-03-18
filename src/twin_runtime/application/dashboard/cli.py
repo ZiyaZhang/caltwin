@@ -49,8 +49,8 @@ def dashboard_command(
         from twin_runtime.application.calibration.fidelity_evaluator import compute_fidelity_score
         historical_evaluations = [e for e in evals if e.evaluation_id != evaluation.evaluation_id]
         raw_fidelity_score = compute_fidelity_score(evaluation, historical_evaluations=historical_evaluations, weighted=False)
-    except Exception:
-        pass  # Pre-5c evaluations may not support weighted mode
+    except (AttributeError, TypeError, KeyError):
+        pass  # Pre-5c evaluations may lack time_decay_weight on case_details
 
     biases = cal_store.list_detected_biases()
     payload = DashboardPayload(
