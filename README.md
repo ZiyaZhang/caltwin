@@ -4,9 +4,9 @@
 
 Most AI memory systems optimize recall. twin-runtime optimizes *calibrated judgment*.
 
-twin-runtime is a **calibration-first judgment twin** that learns your decision-making patterns across work domains and provides recommendations that match how you actually choose.
+twin-runtime is a **calibration-first judgment twin** that learns your decision-making patterns across work domains and provides recommendations that match how you actually choose — while knowing when it should not judge on your behalf at all.
 
-> Memory is input. Calibrated judgment is output.
+> Memory is input. Calibration is the flywheel. Reliable judgment with clear boundaries is the product.
 
 **Evidence:** 0.758 choice fidelity across 20 real work-domain decisions (alpha).
 
@@ -22,6 +22,13 @@ pip install twin-runtime
 twin-runtime init
 twin-runtime run "Should I prioritize the refactor or the new feature?" \
   -o "Refactor first" "New feature first" "Split the sprint"
+```
+
+**Try without setup** (demo mode, no data persisted):
+
+```bash
+twin-runtime run --demo "Should I prioritize the refactor or the new feature?" \
+  -o "Refactor first" "New feature first"
 ```
 
 See [docs/quickstart.md](docs/quickstart.md) for detailed installation and setup.
@@ -78,53 +85,58 @@ Most memory systems optimize recall. twin-runtime optimizes calibrated judgment.
 | Core loop | Store and retrieve | Decide, reflect, calibrate |
 | Output | "Here's what you said before" | "Here's what you'd likely choose, with uncertainty" |
 | Feedback | None | Ground-truth outcome tracking |
-| Metrics | Recall accuracy | Choice fidelity, calibration quality |
-| Adaptation | Append-only | Bias correction from real outcomes |
+| Metrics | Recall accuracy | Choice fidelity, calibration quality, abstention correctness |
+| Adaptation | Append-only | Bias correction + time decay from real outcomes |
+| Boundaries | None | Knows when to refuse — out-of-scope queries get honest abstention |
 
 ## Architecture
 
 ```mermaid
 graph TD
-    A[User Decision Query] --> B[Domain Classification]
-    B --> C[Multi-Head Reasoning]
-    C --> D[Calibrated Scoring]
-    D --> E[Uncertainty Estimation]
-    E --> F[Recommendation + Ranking]
+    A[User Decision Query] --> B[Scope Guard]
+    B -->|restricted/non-modeled| R[REFUSE]
+    B -->|in scope| C[Situation Interpreter]
+    C --> D{Route Decision}
+    D -->|S1: low risk, single domain| E[Single-Pass Pipeline]
+    D -->|S2: high stakes, multi-domain| F[Deliberation Loop]
+    F -->|retrieve more → reassess → re-arbitrate| F
+    F -->|converged or budget exhausted| G[Synthesizer]
+    E --> G
+    G --> H[Decision + Uncertainty + Routing Metadata]
 
-    G[User Reflects on Outcome] --> H[Outcome Tracker]
-    H --> I[Calibration Pipeline]
-    I --> J[Bias Correction]
-    J --> C
-
-    K[Twin State] --> C
-    K --> D
-    I --> K
+    I[User Reflects on Outcome] --> J[Calibration Pipeline]
+    J --> K[Time-Decayed Fidelity Metrics]
+    K --> L[Drift Detection]
+    L --> M[Shadow Ontology Suggestions]
 ```
 
 **Pipeline flow:**
-1. **Domain classification** routes the query to relevant domain heads (work, life_planning, money, etc.)
-2. **Multi-head reasoning** activates domain-specific judgment patterns from the twin state
-3. **Calibrated scoring** ranks options with per-domain reliability weights
-4. **Uncertainty estimation** reports confidence honestly -- low-reliability domains get high uncertainty
-5. **Reflection loop** records what you actually chose, feeding the calibration flywheel
+1. **Scope guard** checks restricted use cases and non-modeled capabilities before LLM is called
+2. **Situation interpreter** classifies the query into domains with structured LLM output
+3. **Route decision** determines depth: S1 (fast, single-pass) or S2 (deliberation with bounded iteration)
+4. **S2 deliberation** retrieves more evidence, re-activates heads, re-arbitrates — up to 2 rounds
+5. **Synthesizer** produces the final recommendation with honest uncertainty
+6. **Reflection loop** records actual choices, feeding time-decayed calibration metrics
+7. **Drift detection** monitors preference shifts; **shadow ontology** discovers emergent subdomains
 
 ## Fidelity Metrics
 
 | Metric | Description | Current Value |
 |--------|-------------|---------------|
-| **Choice Fidelity (CF)** | % of decisions ranked correctly at #1 | 0.758 |
+| **Choice Fidelity (CF)** | % of decisions ranked correctly at #1 | 0.758 (weighted) |
 | **Calibration Quality (CQ)** | Match between stated uncertainty and accuracy | 0.807 |
 | **Abstention Correctness** | % of out-of-scope queries correctly refused | ≥0.9 (target) |
-| **Temporal Stability (TS)** | Consistency over time | experimental -- insufficient history |
+| **Temporal Stability (TS)** | Consistency over time | experimental |
 | **Reasoning Fidelity (RF)** | Similarity of reasoning to user's own | v0.2 |
+
+All metrics support **time-decayed weighting** — recent decisions matter more than old ones.
 
 Generate the fidelity dashboard:
 
 ```bash
+twin-runtime evaluate
 twin-runtime dashboard --output fidelity_report.html --open
 ```
-
-See [docs/fidelity_report_demo.html](docs/fidelity_report_demo.html) for a sample dashboard.
 
 ## CLI Commands
 
@@ -132,10 +144,14 @@ See [docs/fidelity_report_demo.html](docs/fidelity_report_demo.html) for a sampl
 |---------|-------------|
 | `twin-runtime init` | Initialize twin state |
 | `twin-runtime run` | Run a decision through the twin |
+| `twin-runtime run --demo` | Try with sample twin (no data persisted) |
+| `twin-runtime run --max-rounds N` | Set max S2 deliberation rounds (default 2) |
 | `twin-runtime reflect` | Record what you actually chose |
 | `twin-runtime status` | Show twin state and fidelity summary |
-| `twin-runtime evaluate` | Run batch fidelity evaluation |
+| `twin-runtime evaluate` | Run batch fidelity evaluation (raw + weighted) |
 | `twin-runtime dashboard` | Generate HTML fidelity report |
+| `twin-runtime drift-report` | Detect preference and confidence drift |
+| `twin-runtime ontology-report` | Generate shadow ontology suggestions |
 | `twin-runtime install-skills` | Install Claude Code skills |
 | `twin-runtime mcp-serve` | Start MCP server (stdio) |
 
@@ -146,6 +162,12 @@ git clone https://github.com/ZiyaZhang/caltwin.git
 cd caltwin
 pip install -e ".[dev]"
 pytest tests/ -q -m "not requires_llm"
+```
+
+For shadow ontology features:
+
+```bash
+pip install -e ".[dev,analysis]"
 ```
 
 ## License
