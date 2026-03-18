@@ -133,7 +133,9 @@ Decay is consumed in these offline paths only:
 
 2. **Drift detector:** Uses decay weights to compute weighted distributions for JSD/effect-size comparison.
 
-3. **Shadow ontology:** Uses decayed support counts for stability assessment.
+3. **Shadow ontology stability assessment:** Uses `time_decay_weight()` on CalibrationCase ages to compute `decayed_support` per cluster. This is the primary consumer of case decay in 5c.
+
+**Evidence decay:** The `time_decay_weight()` API supports both evidence and calibration objects, but in 5c v1, evidence decay has no active consumer. The document builder uses CalibrationCase fields only (§5.2), and runtime retrieval is not modified (§3.6). Evidence decay parameters (half_life=60, floor=0.1) are defined and tested for API correctness, ready for future phases that add evidence-weighted retrieval or evidence-aware clustering.
 
 Future phases may introduce decay into runtime retrieval, but that would be a deliberate "runtime impact" change with its own gate and golden trace regression.
 
@@ -179,11 +181,13 @@ class DriftReport(BaseModel):
 
 ### 4.2 Domain-Level Preference Drift
 
-For each domain with sufficient cases:
+For each `(domain, task_type)` pair with sufficient cases:
 1. Split cases into recent window (last N days) and historical window
-2. Build choice distribution: `P(choice | domain)` for each window
+2. Build choice distribution: `P(choice | domain, task_type)` for each window
 3. Compute **Jensen-Shannon Divergence** between the two distributions
 4. If JSD > threshold (e.g., 0.15) → flag as drift signal
+
+**Why (domain, task_type)?** Choice labels are only comparable within the same task type. "Stay vs Leave" (career decisions) is incomparable with "Refactor vs Ship" (tech decisions), even if both are in the `work` domain. Domain-level summary is derived by aggregating task_type-level signals (e.g., "3 of 5 work task_types show drift").
 
 ### 4.3 Axis-Level Confidence Drift
 
@@ -202,7 +206,7 @@ Note: `TwinEvaluation` and `EvaluationCaseDetail` do not store per-axis utility 
 ```python
 def detect_drift(
     cases: List[CalibrationCase],
-    evaluations: List[TwinEvaluation],
+    traces: List[RuntimeDecisionTrace],  # for axis-level drift via utility_decomposition
     twin: TwinState,
     *,
     as_of: datetime,
@@ -212,6 +216,11 @@ def detect_drift(
     axis_delta_threshold: float = 0.1,
 ) -> DriftReport:
 ```
+
+**Input contract:**
+- `cases`: for domain-level preference drift (grouped by domain + task_type)
+- `traces`: for axis-level confidence drift (via `head_assessments[].utility_decomposition`)
+- `evaluations` removed — it was misleading since TwinEvaluation lacks per-axis scores and per-case timestamps
 
 ### 4.5 Storage
 
@@ -238,16 +247,9 @@ stakes:{case.stakes.value} reversibility:{case.reversibility.value}
 domain:{case.domain_label.value} task_type:{case.task_type}
 ```
 
-**Optional linked trace enrichment:** CalibrationCase currently has no `trace_id` field (linkage is lost during promotion from CandidateCalibrationCase). If a trace can be found by matching `observed_context` or by future trace_id linkage, append:
+**No trace enrichment in 5c v1.** CalibrationCase currently has no `trace_id` field (linkage is lost during promotion from CandidateCalibrationCase). Text-matching on `observed_context` is too fragile and risks polluting clusters with wrong trace data.
 
-```
-decision_mode:{trace.decision_mode.value}
-refusal_reason_code:{trace.refusal_reason_code}
-route_path:{trace.route_path}
-{trace.final_decision}
-```
-
-**First version:** Document builder uses CalibrationCase fields only. Trace enrichment is best-effort — if no trace found, the document is still useful for clustering. This avoids depending on linkage that doesn't reliably exist yet.
+**First version:** Document builder uses CalibrationCase fields only. The document is sufficient for meaningful clustering — `observed_context`, `actual_reasoning`, structural tokens all come from the case itself. Future phases can add `trace_id` to CalibrationCase and enable trace enrichment when explicit linkage exists.
 
 Structural tokens (stakes, domain, task_type, etc.) are appended as words to participate in TF-IDF.
 
