@@ -17,6 +17,11 @@ from twin_runtime.application.comparison.runners.persona import (
     build_persona_system_prompt,
 )
 from twin_runtime.application.comparison.runners.rag_persona import RagPersonaRunner
+from twin_runtime.application.comparison.runners.twin_runner import (
+    TwinRunner,
+    _extract_chosen,
+    _is_refusal,
+)
 from twin_runtime.application.comparison.schemas import ComparisonScenario
 
 
@@ -184,3 +189,52 @@ class TestRagPersonaRunner:
         call_args = llm.ask_text.call_args
         system = call_args[0][0]
         assert "stability over risk" in system
+
+
+class TestExtractChosen:
+    def test_recommended_format(self):
+        trace = MagicMock()
+        trace.final_decision = "Recommended: Accept (over Decline)"
+        assert _extract_chosen(trace, ["Accept", "Decline"]) == "Accept"
+
+    def test_plain_text(self):
+        trace = MagicMock()
+        trace.final_decision = "I recommend you Accept this opportunity."
+        assert _extract_chosen(trace, ["Accept", "Decline"]) == "Accept"
+
+    def test_fallback_first_option(self):
+        trace = MagicMock()
+        trace.final_decision = "No clear match"
+        assert _extract_chosen(trace, ["Alpha", "Beta"]) == "Alpha"
+
+
+class TestIsRefusal:
+    def test_refused_mode(self):
+        trace = MagicMock()
+        trace.decision_mode.value = "refused"
+        trace.refusal_reason_code = None
+        assert _is_refusal(trace) is True
+
+    def test_degraded_mode(self):
+        trace = MagicMock()
+        trace.decision_mode.value = "degraded"
+        trace.refusal_reason_code = None
+        assert _is_refusal(trace) is True
+
+    def test_direct_with_refusal_code(self):
+        trace = MagicMock()
+        trace.decision_mode.value = "direct"
+        trace.refusal_reason_code = "OUT_OF_SCOPE"
+        assert _is_refusal(trace) is True
+
+    def test_direct_normal(self):
+        trace = MagicMock()
+        trace.decision_mode.value = "direct"
+        trace.refusal_reason_code = None
+        assert _is_refusal(trace) is False
+
+
+class TestTwinRunner:
+    def test_runner_id(self):
+        r = TwinRunner()
+        assert r.runner_id == "twin"
