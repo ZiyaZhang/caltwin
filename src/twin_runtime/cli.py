@@ -531,6 +531,83 @@ def cmd_install_skills(args):
     print(f"\nInstalled {len(installed)} skills to {target}")
 
 
+def cmd_drift_report(args):
+    """Generate drift detection report."""
+    config = _load_config()
+    _apply_env(config)
+    user_id = config.get("user_id", "default")
+    twin = _require_twin(config)
+
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+    from twin_runtime.application.calibration.drift_detector import detect_drift
+    from datetime import datetime, timezone
+
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+
+    cases = cal_store.list_cases(used=None)
+    trace_ids = trace_store.list_traces(limit=10000)
+    traces = []
+    for tid in trace_ids:
+        try:
+            traces.append(trace_store.load_trace(tid))
+        except Exception:
+            continue
+
+    as_of = datetime.now(timezone.utc)
+    report = detect_drift(cases, traces, twin, as_of=as_of)
+
+    # Persist
+    report_dir = _STORE_DIR / user_id / "reports" / "drift"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = getattr(args, 'output', None) or str(report_dir / f"{as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+
+    print(f"Drift report saved: {output_path}")
+    print(f"Domain signals: {len(report.domain_signals)}, Axis signals: {len(report.axis_signals)}")
+    for sig in report.domain_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+    for sig in report.axis_signals:
+        print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+
+
+def cmd_ontology_report(args):
+    """Generate shadow ontology report."""
+    try:
+        from twin_runtime.application.ontology.report_generator import generate_ontology_report
+    except ImportError:
+        print("This command requires: pip install twin-runtime[analysis]")
+        return
+
+    config = _load_config()
+    _apply_env(config)
+    user_id = config.get("user_id", "default")
+    twin = _require_twin(config)
+
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from datetime import datetime, timezone
+
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    cases = cal_store.list_cases(used=None)
+
+    as_of = datetime.now(timezone.utc)
+    report = generate_ontology_report(cases, twin, as_of=as_of)
+
+    # Persist
+    report_dir = _STORE_DIR / user_id / "reports" / "ontology"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = getattr(args, 'output', None) or str(report_dir / f"{as_of.strftime('%Y%m%d_%H%M%S')}.json")
+    Path(output_path).write_text(report.model_dump_json(indent=2))
+
+    print(f"Ontology report saved: {output_path}")
+    print(f"Domains analyzed: {report.domains_analyzed}")
+    print(f"Suggestions: {len(report.suggestions)}")
+    for s in report.suggestions:
+        label = s.llm_label or s.deterministic_label
+        print(f"  [{s.parent_domain.value}] {label} (support={s.support_count}, stability={s.stability_score:.2f})")
+
+
 def cmd_mcp_serve(args):
     """Start MCP server (stdio, blocking)."""
     import asyncio
@@ -662,6 +739,14 @@ def main():
     # mcp-serve (Phase 4)
     sub.add_parser("mcp-serve", help="Start MCP server (stdio transport)")
 
+    # drift-report (Phase 5c)
+    p_drift = sub.add_parser("drift-report", help="Generate drift detection report")
+    p_drift.add_argument("--output", help="Output file path")
+
+    # ontology-report (Phase 5c)
+    p_ontology = sub.add_parser("ontology-report", help="Generate shadow ontology report")
+    p_ontology.add_argument("--output", help="Output file path")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -681,6 +766,8 @@ def main():
         "reflect": cmd_reflect,
         "install-skills": cmd_install_skills,
         "mcp-serve": cmd_mcp_serve,
+        "drift-report": cmd_drift_report,
+        "ontology-report": cmd_ontology_report,
     }
     commands[args.command](args)
 
