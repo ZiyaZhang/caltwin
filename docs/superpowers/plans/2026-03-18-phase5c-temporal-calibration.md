@@ -373,6 +373,8 @@ print(f"Weighted CF: {weighted_score.choice_fidelity.value:.3f} (raw: {raw_score
 
 This avoids needing two separate persisted score files. The evaluation carries enough data to reconstruct both.
 
+**Historical trend:** Dashboard's historical score series defaults to weighted values. Raw is only shown for the current evaluation's comparison view. `DashboardPayload.historical_scores` remains a single list — each `TwinFidelityScore` in it uses weighted values when available (pre-5c scores use raw as fallback).
+
 **Default:** CLI evaluate shows weighted as primary metric. Dashboard shows both.
 
 - [ ] **Step 6: Run and commit**
@@ -676,6 +678,7 @@ git commit -m "feat: drift-report and ontology-report CLI commands"
 - [ ] **Time decay**: `python3 -m pytest tests/test_time_decay.py -v`
 - [ ] **Drift detection**: `python3 -m pytest tests/test_drift_detector.py -v`
 - [ ] **Ontology** (requires sklearn): `python3 -m pytest tests/test_ontology.py -v`
+- [ ] **Dashboard**: `python3 -m pytest tests/test_dashboard.py -v` (raw + weighted rendering)
 - [ ] **Runtime impact zero**: no changes to runner, orchestrator, route_decision, deliberation, single_pass
 
 **Ontology test strategy:** `tests/test_ontology.py` must use `pytest.importorskip("sklearn")` at module level. Tests skip gracefully when scikit-learn is not installed. CI can optionally install `[analysis]` extra for full coverage. This matches the "optional dependency" contract — tests don't fail, they skip.
