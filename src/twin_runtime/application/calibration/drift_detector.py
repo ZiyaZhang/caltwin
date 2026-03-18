@@ -132,7 +132,7 @@ def _detect_axis_drift(
     ]
 
     # Collect per-axis scores with timestamps and decay weights
-    from twin_runtime.application.calibration.time_decay import time_decay_weight, EVIDENCE_HALF_LIFE, EVIDENCE_FLOOR
+    from twin_runtime.application.calibration.time_decay import time_decay_weight, CALIBRATION_HALF_LIFE, CALIBRATION_FLOOR
     axis_scores: Dict[str, List[Tuple[datetime, float]]] = {}
     for t in valid_traces:
         ts = t.created_at
@@ -156,7 +156,7 @@ def _detect_axis_drift(
             total_v = 0.0
             for ts, v in data:
                 age = max(0.0, (as_of - ts).total_seconds() / 86400.0)
-                w = time_decay_weight(age, EVIDENCE_HALF_LIFE, EVIDENCE_FLOOR)
+                w = time_decay_weight(age, CALIBRATION_HALF_LIFE, CALIBRATION_FLOOR)
                 total_w += w
                 total_v += v * w
             return total_v / total_w if total_w > 0 else 0.0

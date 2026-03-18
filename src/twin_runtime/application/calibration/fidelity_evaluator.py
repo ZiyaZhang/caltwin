@@ -433,8 +433,9 @@ def _compute_calibration_quality(
             bin_ece = abs(avg_conf - accuracy) * len(bucket) / n
 
         total_ece += bin_ece
+        bin_count = sum(d.time_decay_weight for d in bucket) if weighted else len(bucket)
         bins.append({
-            "range": [low, high], "count": len(bucket),
+            "range": [low, high], "count": round(bin_count, 3),
             "avg_conf": avg_conf, "accuracy": accuracy,
         })
 

@@ -122,22 +122,31 @@ def _section_overview(payload: DashboardPayload) -> str:
 
     radar_svg = _svg_radar(cf.value, rf.value, cq.value, ts.value)
 
-    def _metric_row(label: str, m: FidelityMetric) -> str:
+    raw = payload.raw_fidelity_score
+    has_raw = raw is not None
+
+    def _metric_row(label: str, m: FidelityMetric, raw_m=None) -> str:
         warn = _metric_warnings(m)
+        raw_col = ""
+        if has_raw and raw_m is not None:
+            raw_col = f'<td style="color:{_score_color(raw_m.value)}">{_pct(raw_m.value)}</td>'
+        elif has_raw:
+            raw_col = '<td>—</td>'
         return (
             f'<tr>'
             f'<td>{label}</td>'
             f'<td style="color:{_score_color(m.value)}">{_pct(m.value)}</td>'
+            f'{raw_col}'
             f'<td>conf: {m.confidence_in_metric:.2f} | n={m.case_count}</td>'
             f'<td>{warn}</td>'
             f'</tr>\n'
         )
 
     metrics_rows = (
-        _metric_row("Choice Fidelity (CF)", cf)
-        + _metric_row("Reasoning Fidelity (RF)", rf)
-        + _metric_row("Calibration Quality (CQ)", cq)
-        + _metric_row("Temporal Stability (TS)", ts)
+        _metric_row("Choice Fidelity (CF)", cf, raw.choice_fidelity if has_raw else None)
+        + _metric_row("Reasoning Fidelity (RF)", rf, raw.reasoning_fidelity if has_raw else None)
+        + _metric_row("Calibration Quality (CQ)", cq, raw.calibration_quality if has_raw else None)
+        + _metric_row("Temporal Stability (TS)", ts, raw.temporal_stability if has_raw else None)
     )
 
     twin_id = html.escape(str(payload.twin.id))
@@ -154,7 +163,7 @@ def _section_overview(payload: DashboardPayload) -> str:
       </div>
       <p class="meta">Twin: <strong>{twin_id}</strong> &mdash; version <strong>{version}</strong></p>
       <table class="metrics-table">
-        <thead><tr><th>Metric</th><th>Score</th><th>Confidence / Cases</th><th>Warnings</th></tr></thead>
+        <thead><tr><th>Metric</th><th>{"Weighted" if has_raw else "Score"}</th>{"<th>Raw</th>" if has_raw else ""}<th>Confidence / Cases</th><th>Warnings</th></tr></thead>
         <tbody>{metrics_rows}</tbody>
       </table>
     </div>
