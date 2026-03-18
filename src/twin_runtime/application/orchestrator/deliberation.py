@@ -181,7 +181,13 @@ def deliberation_loop(
             and not conflict.resolvable_by_system):
         trace.decision_mode = DecisionMode.REFUSED
         trace.refusal_reason_code = "INSUFFICIENT_EVIDENCE"
+        trace.refusal_or_degrade_reason = "insufficient_evidence_after_deliberation"
         trace.final_decision = "Insufficient evidence to resolve conflicting assessments."
+        trace.output_text = (
+            "After deliberation, I don't have enough evidence to give a reliable answer "
+            "on this question. The underlying domain assessments conflict and additional "
+            "evidence retrieval did not resolve the disagreement."
+        )
 
     # Micro-calibration (same as single_pass, preserves backward compat for S2 path)
     if micro_calibrate:
