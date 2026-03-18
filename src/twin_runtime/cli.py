@@ -191,6 +191,11 @@ def cmd_run(args):
         print(f"Decision: {trace.final_decision}")
         print(f"Mode: {trace.decision_mode.value} | Uncertainty: {trace.uncertainty:.2f}")
         print(f"Domains: {[d.value for d in trace.activated_domains]}")
+        print(f"Route: {trace.route_path} | Policy: {trace.boundary_policy}")
+        if trace.refusal_reason_code:
+            print(f"Refusal: {trace.refusal_reason_code}")
+        if trace.deliberation_rounds > 0:
+            print(f"Deliberation: {trace.deliberation_rounds} rounds | Terminated: {trace.terminated_by}")
         if trace.output_text:
             print(f"\n{trace.output_text}")
         print(f"{'='*60}")

@@ -145,7 +145,14 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
             "activated_domains": [d.value for d in trace.activated_domains],
             "trace_id": trace.trace_id,
             "reasoning": trace.output_text,
+            "route_path": trace.route_path,
+            "boundary_policy": trace.boundary_policy,
         }
+        if trace.refusal_reason_code:
+            result["refusal_reason_code"] = trace.refusal_reason_code
+        if trace.deliberation_rounds > 0:
+            result["deliberation_rounds"] = trace.deliberation_rounds
+            result["terminated_by"] = trace.terminated_by
         return json.dumps(result, indent=2, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": "Error running twin_decide: %s" % e})

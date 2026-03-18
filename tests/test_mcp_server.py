@@ -106,6 +106,11 @@ class TestHandleDecide:
         mock_trace.activated_domains = []
         mock_trace.trace_id = "test-trace-123"
         mock_trace.output_text = "A is better"
+        mock_trace.route_path = "s1_direct"
+        mock_trace.boundary_policy = "normal"
+        mock_trace.refusal_reason_code = None
+        mock_trace.deliberation_rounds = 0
+        mock_trace.terminated_by = None
         mock_trace.model_dump_json.return_value = "{}"
 
         with patch.dict("os.environ", env), \

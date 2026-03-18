@@ -278,7 +278,7 @@ class TestDegradedOutputConsistency:
         ))
         # Use the low_reliability case which triggers BORDERLINE → FORCE_DEGRADE
         case = json.loads(
-            (GOLDEN_DIR / "refuse_low_reliability.json").read_text()
+            (GOLDEN_DIR / "degrade_non_modeled_partial.json").read_text()
         )
         llm = ScriptedLLM(case["llm_script"])
         trace = run(query=case["query"], option_set=case["option_set"], twin=twin, llm=llm)

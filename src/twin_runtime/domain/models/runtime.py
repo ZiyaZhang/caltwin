@@ -86,7 +86,7 @@ class RuntimeDecisionTrace(BaseModel):
     )
     refusal_reason_code: Optional[str] = Field(
         default=None,
-        description="OUT_OF_SCOPE | NON_MODELED | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE | INSUFFICIENT_EVIDENCE",
+        description="OUT_OF_SCOPE | NON_MODELED | NON_MODELED_PARTIAL | POLICY_RESTRICTED | LOW_RELIABILITY | DEGRADED_SCOPE | INSUFFICIENT_EVIDENCE",
     )
     # Routing metadata (Phase 5b)
     route_path: str = Field(default="s1_direct", description="Execution path: s1_direct | s2_deliberate | no_execution")

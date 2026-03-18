@@ -1,6 +1,6 @@
 {
-  "name": "refuse_low_reliability",
-  "description": "Borderline scope, runs but all domains below reliability threshold. Post-execution LOW_RELIABILITY. NOTE: This case is hard to trigger deterministically with mocks because interpret_situation filters low-reliability domains before routing. The expected behavior is borderline scope with degraded output.",
+  "name": "degrade_non_modeled_partial",
+  "description": "Query hits non_modeled alias (aesthetic) but has partial domain activation. Route: S1 + FORCE_DEGRADE. Result: DEGRADED with NON_MODELED_PARTIAL reason.",
   "query": "What aesthetic style suits my apartment renovation?",
   "option_set": ["Modern minimalist", "Traditional"],
   "twin_fixture": "tests/fixtures/sample_twin_state.json",
