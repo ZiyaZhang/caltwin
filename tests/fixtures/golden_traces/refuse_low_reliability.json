@@ -27,7 +27,10 @@
     "synthesize": "I'd lean modern minimalist but I'm not confident here."
   },
   "expected": {
+    "decision_mode": "degraded",
+    "refusal_reason_code": "DEGRADED_SCOPE",
     "route_path": "s1_direct",
-    "boundary_policy": "force_degrade"
+    "boundary_policy": "force_degrade",
+    "expected_top_choice": "Modern minimalist"
   }
 }
