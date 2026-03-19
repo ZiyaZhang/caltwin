@@ -11,8 +11,8 @@ pip install twin-runtime
 ### From source (development)
 
 ```bash
-git clone https://github.com/ZiyaZhang/caltwin.git
-cd caltwin
+git clone https://github.com/ZiyaZhang/twin-runtime.git
+cd twin-runtime
 pip install -e ".[dev]"
 ```
 
@@ -52,6 +52,35 @@ twin-runtime reflect --choice "Refactor first" --reasoning "Tech debt was blocki
 ```
 
 This feeds the calibration flywheel. Over time, the twin learns your decision patterns.
+
+You can also specify how the outcome was observed:
+
+```bash
+twin-runtime reflect --choice "Refactor first" --source user_correction --confidence 0.9
+```
+
+## Automatic Reflection (Heartbeat)
+
+The twin can infer outcomes from your local activity — git commits, file changes, calendar events, and email:
+
+```bash
+twin-runtime heartbeat
+```
+
+Low-confidence inferences are queued for your confirmation:
+
+```bash
+# See what's pending
+twin-runtime confirm --list
+
+# Accept all pending reflections
+twin-runtime confirm --accept-all
+
+# Or review one by one (interactive)
+twin-runtime confirm
+```
+
+Run `heartbeat` periodically (e.g., via cron or shell hook) for passive calibration.
 
 ## Check Twin Status
 

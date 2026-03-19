@@ -105,8 +105,10 @@ graph TD
     G --> H[Decision + Uncertainty + Routing Metadata]
 
     I[User Reflects on Outcome] --> J[Calibration Pipeline]
+    N[Heartbeat: Git/Calendar/Email/Files] -->|implicit| J
     J --> K[Time-Decayed Fidelity Metrics]
-    K --> L[Drift Detection]
+    K --> O[Pattern Mining]
+    O --> L[Drift Detection]
     L --> M[Shadow Ontology Suggestions]
 ```
 
@@ -117,7 +119,9 @@ graph TD
 4. **S2 deliberation** retrieves more evidence, re-activates heads, re-arbitrates — up to 2 rounds
 5. **Synthesizer** produces the final recommendation with honest uncertainty
 6. **Reflection loop** records actual choices, feeding time-decayed calibration metrics
-7. **Drift detection** monitors preference shifts; **shadow ontology** discovers emergent subdomains
+7. **Implicit reflection** (heartbeat) infers outcomes from Git activity, calendar, email, and file changes
+8. **Pattern mining** detects systematic failure modes across evaluation misses
+9. **Drift detection** monitors preference shifts; **shadow ontology** discovers emergent subdomains
 
 ## Fidelity Metrics
 
@@ -143,10 +147,14 @@ twin-runtime dashboard --output fidelity_report.html --open
 | Command | Description |
 |---------|-------------|
 | `twin-runtime init` | Initialize twin state |
+| `twin-runtime bootstrap` | Interactive onboarding: build a usable twin in 15 minutes |
 | `twin-runtime run` | Run a decision through the twin |
 | `twin-runtime run --demo` | Try with sample twin (no data persisted) |
 | `twin-runtime run --max-rounds N` | Set max S2 deliberation rounds (default 2) |
-| `twin-runtime reflect` | Record what you actually chose |
+| `twin-runtime reflect` | Record what you actually chose (`--source`, `--confidence`) |
+| `twin-runtime heartbeat` | Implicit reflection from Git/Calendar/Email/file signals |
+| `twin-runtime confirm` | Confirm pending implicit reflections (`--list`, `--accept-all`) |
+| `twin-runtime mine-patterns` | Detect systematic failure patterns (`--min-failures`, `--lookback`) |
 | `twin-runtime status` | Show twin state and fidelity summary |
 | `twin-runtime evaluate` | Run batch fidelity evaluation (raw + weighted) |
 | `twin-runtime dashboard` | Generate HTML fidelity report |
@@ -159,8 +167,8 @@ twin-runtime dashboard --output fidelity_report.html --open
 ## Development
 
 ```bash
-git clone https://github.com/ZiyaZhang/caltwin.git
-cd caltwin
+git clone https://github.com/ZiyaZhang/twin-runtime.git
+cd twin-runtime
 pip install -e ".[dev]"
 pytest tests/ -q -m "not requires_llm"
 ```

@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Phase D: Implicit Reflection + Experience Gating
+
+- **HeartbeatReflector**: implicit outcome inference from Git commits/PRs, file changes, Calendar events, and Email
+  - Trace-outcome diff for automatic pending discovery
+  - High-confidence inferences auto-reflected; low-confidence queued for manual confirmation
+  - Atomic write for pending queue (tmpfile + rename)
+- **ExperienceUpdater**: conflict-aware gating replaces direct `exp_lib.add()`
+  - Four outcomes: ADDED / CONFIRMED / SUPERSEDED / REJECTED
+  - Jaccard + keyword overlap for duplicate detection; was_correct divergence for conflict detection
+- **HardCaseMiner**: systematic failure pattern detection via LLM
+  - Groups failures by domain, extracts PatternInsight with correction strategies
+  - File-based reflect counter triggers mining every 20 reflections
+- **OpenClaw Skill**: SKILL.md + heartbeat script + install check + calibration reference
+
+### CLI
+
+- `twin-runtime heartbeat` — run implicit reflection from local signals
+- `twin-runtime confirm` — confirm/reject pending implicit reflections (`--list`, `--accept-all`)
+- `twin-runtime mine-patterns` — analyze systematic failure patterns (`--min-failures`, `--lookback`)
+- `twin-runtime reflect` — added `--source` and `--confidence` parameters
+
+### Prerequisites (Phase D)
+
+- `RuntimeDecisionTrace.option_set` — records options on all trace paths (S1/S2/refusal/error)
+- `OutcomeSource` — 4 implicit variants: `implicit_git`, `implicit_file`, `implicit_calendar`, `implicit_email`
+- `extract_keywords()` — promoted to `domain/utils/text.py` shared utility (3 consumers migrated)
+- `ExperienceLibrary.add_pattern()` — supports PatternInsight insertion
+
+### Project
+
+- Renamed repository URLs from `caltwin` to `twin-runtime`
+- 620+ tests (50 new for Phase D), ruff clean
+
 ## v0.1.0 (2026-03-17)
 
 Initial open source alpha release.
@@ -49,7 +84,7 @@ Initial open source alpha release.
 
 ### Testing
 
-- 295+ tests covering pipeline, calibration, CLI, MCP, and skills
+- 570+ tests covering pipeline, calibration, CLI, MCP, and skills
 - `requires_llm` marker for tests needing API key
 - Offline test suite runs without any external dependencies
 
