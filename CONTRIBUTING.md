@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/ZiyaZhang/caltwin.git
-cd twin-runtime
+cd caltwin
 pip install -e ".[dev]"
 ```
 

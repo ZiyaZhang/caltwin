@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/schemas/twin-runtime-core-v0.1.1.schema.json",
   "title": "Twin Runtime Core Objects v0.1.1",
-  "description": "Complete schema bundle for OpenClaw Persona Runtime Adapter core objects.",
+  "description": "Complete schema bundle for twin-runtime core objects.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

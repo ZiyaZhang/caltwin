@@ -56,7 +56,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/twin_runtime/runtime/*.py" = ["F401", "F403"]  # backward-compat shims
 "tests/*.py" = ["F401", "F811", "F841"]  # test fixtures may re-import; some assigns are for side effects
 "src/twin_runtime/application/dashboard/generator.py" = ["F841"]  # s used across sections
 "src/twin_runtime/infrastructure/sources/notion_adapter.py" = ["F841"]  # results used for side effect

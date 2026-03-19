@@ -76,7 +76,6 @@ class TestDashboardGeneration:
     def test_contains_footer(self, sample_payload):
         html = generate_dashboard(sample_payload)
         assert "twin-runtime" in html
-        assert "OpenClaw" in html
 
     def test_low_sample_warning_red(self, sample_payload):
         sample_payload.fidelity_score.choice_fidelity = FidelityMetric(
