@@ -667,14 +667,38 @@ def cmd_bootstrap(args):
     if getattr(args, "questions", None):
         import json as _json
         from twin_runtime.application.bootstrap.questions import BootstrapQuestion
-        with open(args.questions) as f:
-            questions = [BootstrapQuestion(**q) for q in _json.load(f)]
+        try:
+            with open(args.questions) as f:
+                raw = _json.load(f)
+            if not isinstance(raw, list):
+                print(f"Error: questions file must contain a JSON array, got {type(raw).__name__}")
+                sys.exit(1)
+            questions = [BootstrapQuestion(**q) for q in raw]
+        except FileNotFoundError:
+            print(f"Error: questions file not found: {args.questions}")
+            sys.exit(1)
+        except _json.JSONDecodeError as e:
+            print(f"Error: invalid JSON in questions file: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error: could not load questions file: {e}")
+            sys.exit(1)
 
     # Validate question set before starting interactive session (fail-early)
     try:
         validate_bootstrap_questions(questions)
     except ValueError as e:
         print(f"Error: invalid question set — {e}")
+        sys.exit(1)
+
+    # Pre-flight LLM check before starting interactive session
+    try:
+        llm = DefaultLLM()
+        llm.ask_text("ping", "respond with 'ok'", max_tokens=8)
+        print("LLM connection verified.\n")
+    except Exception as e:
+        print(f"Error: LLM connection failed — {e}")
+        print("Check your API key (twin-runtime config get api_key) and network.")
         sys.exit(1)
 
     # Present questions interactively
@@ -716,9 +740,8 @@ def cmd_bootstrap(args):
 
             print()
 
-    # Run engine
+    # Run engine (llm already created and verified above)
     print("\nProcessing your answers...")
-    llm = DefaultLLM()
     engine = BootstrapEngine(llm=llm, questions=questions)
     result = engine.run(answers, user_id=user_id)
 
@@ -756,15 +779,15 @@ def _run_bootstrap_comparison(twin, args):
     print(f"\n  Running mini A/B with {n} scenarios...")
     print("  (Use --no-comparison to skip this step)\n")
 
-    # Simple comparison scenarios — test the twin can answer basic decisions
+    # Comparison scenarios — matches onboarding language (Chinese)
     scenarios = [
-        ("Should I negotiate my salary at the new job offer?", ["Negotiate aggressively", "Accept as-is"]),
-        ("A colleague's project approach seems wrong. What should I do?", ["Speak up directly", "Let it play out"]),
-        ("I have savings to invest. Conservative or aggressive?", ["Conservative index funds", "High-growth stocks"]),
-        ("Should I take the remote job or stay at the office role?",  ["Take remote job", "Stay at office"]),
-        ("A friend asks for a large loan. What do I do?", ["Lend the money", "Politely decline"]),
-        ("Should I publish my controversial take on social media?", ["Post it", "Keep it private"]),
-        ("Should I switch careers to follow my passion?", ["Switch now", "Stay and plan gradually"]),
+        ("新工作给了offer，要不要谈薪资？", ["积极谈判争取更高", "直接接受现有条件"]),
+        ("同事的项目方案有明显问题，我该怎么办？", ["直接指出问题", "先观望再说"]),
+        ("手上有一笔存款，投资风格怎么选？", ["稳健型基金", "高成长型股票"]),
+        ("远程工作和坐班工作怎么选？", ["选远程工作", "留在坐班岗位"]),
+        ("朋友找我借一大笔钱，怎么处理？", ["借给他", "委婉拒绝"]),
+        ("要不要在社交媒体上发表有争议的观点？", ["发出去", "留着不发"]),
+        ("要不要换行业追求热爱的方向？", ["立刻转行", "留在原行业慢慢规划"]),
     ][:n]
 
     llm = DefaultLLM()
