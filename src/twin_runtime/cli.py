@@ -169,11 +169,25 @@ def cmd_run(args):
     twin = _require_twin(config, demo=demo)
     user_id = config.get("user_id", "default")
     evidence_store = JsonFileEvidenceStore(str(_STORE_DIR / user_id / "evidence"))
+
+    # Load ExperienceLibrary for ConsistencyChecker (S2 paths)
+    exp_lib = None
+    if not demo:
+        try:
+            from twin_runtime.infrastructure.backends.json_file.experience_store import ExperienceLibraryStore
+            exp_store = ExperienceLibraryStore(str(_STORE_DIR), user_id)
+            exp_lib = exp_store.load()
+            if exp_lib.size == 0:
+                exp_lib = None  # Don't pass empty library
+        except Exception:
+            pass  # No experience library yet — ConsistencyChecker will be skipped
+
     trace = orchestrator_run(
         query=args.query,
         option_set=args.options,
         twin=twin,
         evidence_store=evidence_store,
+        experience_library=exp_lib,
         max_deliberation_rounds=getattr(args, 'max_rounds', 2),
     )
 
