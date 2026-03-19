@@ -1,6 +1,6 @@
 # Spec: D — Implicit Reflection + OpenClaw Skill (v3 final)
 
-> **Status**: Final (11 spec review + 8 plan review + 3 interface alignment corrections)
+> **Status**: Final (11 spec review + 8 plan review + 3 interface alignment + CLI split update)
 > **前置依赖**: B（ExperienceLibrary + ReflectionGenerator + ConsistencyChecker）
 > **产出**: OpenClaw skill、Heartbeat implicit reflection、ExperienceUpdater、Hard-case pattern mining
 > **预估工期**: 8-10 天
@@ -76,6 +76,8 @@ class OutcomeSource(str, Enum):
 ```
 
 ### 1.3 reflect CLI 加 --source / --confidence
+
+**文件**: `cli/_main.py` (argparse) + `cli/_calibration.py` (cmd_reflect 实现)
 
 ```python
 p_reflect.add_argument("--source", default="user_correction",
@@ -232,6 +234,9 @@ def _infer_from_email(self, pending) -> List[InferredReflection]:
 ```
 
 ### 3.5 CLI
+
+**新文件**: `cli/_implicit.py` (heartbeat + confirm + mine-patterns 命令实现)
+**改动**: `cli/_main.py` (argparse + commands dict)
 
 ```
 twin-runtime heartbeat              # 构造 HeartbeatReflector → run()

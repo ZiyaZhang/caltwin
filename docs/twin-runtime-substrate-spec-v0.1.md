@@ -8,7 +8,7 @@
 
 ## 1. Product Thesis
 
-OpenClaw Persona Runtime Adapter is a middleware layer that sits between **real user context** (local files, workspace memory, connected APIs) and **simulation / agent social environments** (OASIS, Concordia, Sotopia, AgentSociety, agent-native networks).
+twin-runtime is a calibration-first judgment twin that sits between **real user context** (local files, workspace memory, connected APIs) and **simulation / agent social environments** (OASIS, Concordia, Sotopia, AgentSociety, agent-native networks).
 
 It does not attempt to replicate a complete person. It constructs a **calibrated judgment twin** — a structured runtime that can approximate a specific person's decision-making behavior within known confidence bounds.
 

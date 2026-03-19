@@ -23,9 +23,10 @@ def tmp_config(tmp_path, monkeypatch):
     """Redirect config to temp directory."""
     config_dir = tmp_path / ".twin-runtime"
     config_dir.mkdir()
-    monkeypatch.setattr("twin_runtime.cli._CONFIG_DIR", config_dir)
-    monkeypatch.setattr("twin_runtime.cli._CONFIG_FILE", config_dir / "config.json")
-    monkeypatch.setattr("twin_runtime.cli._STORE_DIR", config_dir / "store")
+    # Patch the canonical location where helpers read these values
+    monkeypatch.setattr("twin_runtime.cli._main._CONFIG_DIR", config_dir)
+    monkeypatch.setattr("twin_runtime.cli._main._CONFIG_FILE", config_dir / "config.json")
+    monkeypatch.setattr("twin_runtime.cli._main._STORE_DIR", config_dir / "store")
     return config_dir
 
 
@@ -86,7 +87,7 @@ class TestCLI:
         """Status works when twin is loaded into the store."""
         from twin_runtime.domain.models.twin_state import TwinState
         from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
-        import twin_runtime.cli as cli_mod
+        import twin_runtime.cli._main as cli_mod
 
         fixture_path = Path(__file__).parent / "fixtures" / "sample_twin_state.json"
         twin = TwinState(**json.loads(fixture_path.read_text()))

@@ -1,1 +1,1 @@
-"""OpenClaw Persona Runtime Adapter — Twin Runtime Substrate."""
+"""twin-runtime: calibration-first judgment twin."""
