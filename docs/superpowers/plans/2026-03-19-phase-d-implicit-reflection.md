@@ -1,9 +1,11 @@
-# Plan: D — Implicit Reflection + OpenClaw Skill (Implementation v2)
+# Plan: D — Implicit Reflection + OpenClaw Skill (Implementation v3)
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development or superpowers:executing-plans.
 > **对应 Spec**: docs/specs/phase-d-implicit-reflection.md
 > **总步骤**: 8 步 / 8 天
 > **依赖**: B 完成 + 5 项前置改动
+>
+> **NOTE (v3)**: CLI 已拆分为 `src/twin_runtime/cli/` 包（9 个子模块）。所有 CLI 改动需定位到具体子模块，不再是单个 cli.py。
 
 ---
 
@@ -34,13 +36,15 @@ trace.option_set = option_set
 
 ### 0c. reflect CLI 加 --source / --confidence
 
-**文件**: `src/twin_runtime/cli.py`
-1. argparse 加：
+**文件**: `src/twin_runtime/cli/_main.py` (argparse 定义)
+1. 在 `p_reflect` 定义后加：
 ```python
 p_reflect.add_argument("--source", default="user_correction",
     choices=[s.value for s in OutcomeSource])
 p_reflect.add_argument("--confidence", type=float, default=0.8)
 ```
+
+**文件**: `src/twin_runtime/cli/_calibration.py` (cmd_reflect 实现)
 2. cmd_reflect 中 `OutcomeSource(args.source)` 传入 record_outcome 的 source 参数
 3. **P1: confidence 不传入 record_outcome**，仅在输出提示中显示
 
@@ -105,7 +109,9 @@ Commit: `feat: D prerequisites — option_set, OutcomeSource, reflect params, ex
 
 ### 集成
 
-`src/twin_runtime/cli.py` cmd_reflect 中 ReflectionGenerator 之后:
+**文件**: `src/twin_runtime/cli/_calibration.py` (cmd_reflect)
+
+ReflectionGenerator 之后:
 ```python
 # 替换 exp_lib.add(reflection.new_entry)
 from twin_runtime.application.calibration.experience_updater import ExperienceUpdater
@@ -205,10 +211,15 @@ Commit: `feat(D2): HeartbeatReflector — implicit reflection from Git/Calendar/
 
 ## Step 3: CLI heartbeat + confirm（1 天）
 
-### heartbeat 命令
+### 新文件: `src/twin_runtime/cli/_implicit.py`
+
+New CLI submodule for heartbeat + confirm commands (matches CLI split pattern).
 
 ```python
+# src/twin_runtime/cli/_implicit.py
+
 def cmd_heartbeat(args):
+    from twin_runtime.cli._main import _load_config, _apply_env, _STORE_DIR
     config = _load_config()
     _apply_env(config)
     user_id = config.get("user_id", "default")
@@ -239,24 +250,31 @@ def cmd_heartbeat(args):
     report = reflector.run()
     print(f"Heartbeat: {report.inferred} inferred, "
           f"{report.auto_reflected} auto-reflected, {report.queued} queued")
-```
 
-### confirm 命令
 
-```python
 def cmd_confirm(args):
     # --list: print pending queue
     # --accept-all: auto-reflect each pending
     # default: interactive Y/N per item
 ```
 
-### argparse
+### argparse 定义
+
+**文件**: `src/twin_runtime/cli/_main.py` — 在现有 subparsers 之后加:
 
 ```python
+# heartbeat + confirm (Phase D)
 sub.add_parser("heartbeat", help="Run implicit reflection from local signals")
 p_confirm = sub.add_parser("confirm", help="Confirm pending implicit reflections")
 p_confirm.add_argument("--list", action="store_true", dest="list_only")
 p_confirm.add_argument("--accept-all", action="store_true")
+```
+
+**文件**: `src/twin_runtime/cli/_main.py` — commands dict 中加:
+
+```python
+"heartbeat": cmd_heartbeat,
+"confirm": cmd_confirm,
 ```
 
 ### 测试
@@ -287,9 +305,11 @@ Commit: `feat(D2): CLI heartbeat + confirm commands`
 
 ### 触发 (P8: 文件计数器)
 
+**文件**: `src/twin_runtime/cli/_calibration.py` — 新增 helper:
+
 ```python
-# cli.py 中新增
 def _increment_reflect_counter(user_id: str) -> int:
+    from twin_runtime.cli._main import _STORE_DIR
     counter_path = _STORE_DIR / user_id / "reflect_count"
     count = int(counter_path.read_text()) if counter_path.exists() else 0
     count += 1
@@ -297,12 +317,12 @@ def _increment_reflect_counter(user_id: str) -> int:
     return count
 ```
 
-cmd_reflect 中集成:
+**文件**: `src/twin_runtime/cli/_calibration.py` — cmd_reflect 末尾集成:
+
 ```python
 count = _increment_reflect_counter(user_id)
 if count >= 20:
     miner = HardCaseMiner(llm)
-    # Load recent traces + outcomes
     trace_ids = trace_store.list_traces(limit=50)
     traces = [trace_store.load_trace(tid) for tid in trace_ids]
     outcomes = cal_store.list_outcomes()
@@ -317,11 +337,16 @@ if count >= 20:
 
 ### CLI
 
+**文件**: `src/twin_runtime/cli/_main.py` — argparse:
+
 ```python
+# mine-patterns (Phase D)
 p_mine = sub.add_parser("mine-patterns", help="Analyze failure patterns")
 p_mine.add_argument("--min-failures", type=int, default=3)
 p_mine.add_argument("--lookback", type=int, default=50)
 ```
+
+**文件**: `src/twin_runtime/cli/_implicit.py` — cmd_mine_patterns 实现
 
 ### 测试
 
