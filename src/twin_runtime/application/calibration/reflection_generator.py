@@ -13,7 +13,7 @@ from twin_runtime.domain.models.experience import ExperienceEntry, ExperienceLib
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
 from twin_runtime.domain.ports.llm_port import LLMPort
 from twin_runtime.application.calibration.fidelity_evaluator import choice_similarity
-from twin_runtime.application.planner.memory_access_planner import _extract_keywords
+from twin_runtime.domain.utils.text import extract_keywords
 
 
 class ReflectionResult(BaseModel):
@@ -54,8 +54,7 @@ class ReflectionGenerator:
         self, trace: RuntimeDecisionTrace, exp_lib: ExperienceLibrary
     ) -> ReflectionResult:
         """CF-hit: search entries, confirm best match. 0 LLM calls."""
-        from twin_runtime.application.planner.memory_access_planner import _extract_keywords
-        keywords = _extract_keywords(trace.query)
+        keywords = extract_keywords(trace.query)
         matches = exp_lib.search_entries(keywords, top_k=1)
 
         if matches:
@@ -104,7 +103,7 @@ class ReflectionGenerator:
 
         return ExperienceEntry(
             id=f"refl-{uuid.uuid4().hex[:8]}",
-            scenario_type=result.get("scenario_type", None) or _extract_keywords(trace.query),
+            scenario_type=result.get("scenario_type", None) or extract_keywords(trace.query),
             insight=result.get("insight", f"Twin chose wrong. Actual: {ground_truth}"),
             applicable_when=result.get("applicable_when", "Similar decisions"),
             not_applicable_when=result.get("not_applicable_when", ""),

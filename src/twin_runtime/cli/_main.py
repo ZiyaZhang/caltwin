@@ -16,6 +16,7 @@ from pathlib import Path
 # Ensure src is on path when running directly
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from twin_runtime.domain.models.primitives import OutcomeSource
 from twin_runtime.domain.models.twin_state import TwinState
 from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
 
@@ -157,6 +158,7 @@ def main():
     from twin_runtime.cli._onboarding import cmd_bootstrap
     from twin_runtime.cli._comparison import cmd_compare
     from twin_runtime.cli._skills import cmd_install_skills, cmd_mcp_serve
+    from twin_runtime.cli._implicit import cmd_heartbeat, cmd_confirm, cmd_mine_patterns
 
     parser = argparse.ArgumentParser(
         prog="twin-runtime",
@@ -209,6 +211,11 @@ def main():
     p_reflect.add_argument("--reasoning", help="Why you chose this")
     p_reflect.add_argument("--feedback-target", choices=["choice", "reasoning", "confidence"],
                            help="Where the twin was off")
+    p_reflect.add_argument("--source", default="user_correction",
+        choices=[s.value for s in OutcomeSource],
+        help="How the outcome was observed")
+    p_reflect.add_argument("--confidence", type=float, default=0.8,
+        help="Confidence in this reflection (display only, not passed to record_outcome)")
 
     # install-skills (Phase 4)
     p_skills = sub.add_parser("install-skills", help="Install Claude Code skills")
@@ -240,6 +247,15 @@ def main():
     p_bootstrap.add_argument("--no-comparison", action="store_true", help="Skip mini A/B comparison")
     p_bootstrap.add_argument("--comparison-scenarios", type=int, default=5, help="Number of A/B scenarios")
 
+    # heartbeat + confirm + mine-patterns (Phase D)
+    sub.add_parser("heartbeat", help="Run implicit reflection from local signals")
+    p_confirm = sub.add_parser("confirm", help="Confirm pending implicit reflections")
+    p_confirm.add_argument("--list", action="store_true", dest="list_only")
+    p_confirm.add_argument("--accept-all", action="store_true")
+    p_mine = sub.add_parser("mine-patterns", help="Analyze systematic failure patterns")
+    p_mine.add_argument("--min-failures", type=int, default=3)
+    p_mine.add_argument("--lookback", type=int, default=50)
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -262,6 +278,9 @@ def main():
         "compare": cmd_compare,
         "drift-report": cmd_drift_report,
         "ontology-report": cmd_ontology_report,
+        "heartbeat": cmd_heartbeat,
+        "confirm": cmd_confirm,
+        "mine-patterns": cmd_mine_patterns,
         "bootstrap": cmd_bootstrap,
     }
     commands[args.command](args)

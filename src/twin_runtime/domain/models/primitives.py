@@ -144,6 +144,10 @@ class OutcomeSource(str, Enum):
     USER_CORRECTION = "user_correction"
     USER_REFLECTION = "user_reflection"
     OBSERVED = "observed"
+    IMPLICIT_GIT = "implicit_git"
+    IMPLICIT_FILE = "implicit_file"
+    IMPLICIT_CALENDAR = "implicit_calendar"
+    IMPLICIT_EMAIL = "implicit_email"
 
 
 class MicroCalibrationTrigger(str, Enum):
