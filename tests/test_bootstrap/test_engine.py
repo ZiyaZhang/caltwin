@@ -450,3 +450,33 @@ class TestScopeThreshold:
 
         assert result.twin.scope_declaration.min_reliability_threshold == 0.35
         assert "Bootstrap-provisional" in result.twin.scope_declaration.user_facing_summary
+
+
+class TestFailLoud:
+    def test_slider_answer_rejected(self) -> None:
+        """SLIDER answers should raise ValueError."""
+        llm = _make_mock_llm()
+        engine = BootstrapEngine(llm)
+        answers = [
+            BootstrapAnswer(
+                question_id="q1", type=QuestionType.SLIDER,
+                slider_value=0.8, tags=["risk"],
+            ),
+        ]
+        with pytest.raises(ValueError, match="SLIDER.*not yet supported"):
+            engine.run(answers, user_id="test-user")
+
+    def test_custom_domain_rejected(self) -> None:
+        """Custom domain not in DomainEnum should raise ValueError at init."""
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+
+        bad_questions = [
+            BootstrapQuestion(
+                id="custom-q1", phase=2, type=QuestionType.FORCED_CHOICE,
+                question="How good?", options=["Good", "Bad"],
+                domain="alien_domain", tags=["alien"],
+            ),
+        ]
+        llm = _make_mock_llm()
+        with pytest.raises(ValueError, match="not a valid DomainEnum"):
+            BootstrapEngine(llm, questions=bad_questions)

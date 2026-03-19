@@ -670,6 +670,17 @@ def cmd_bootstrap(args):
         with open(args.questions) as f:
             questions = [BootstrapQuestion(**q) for q in _json.load(f)]
 
+    # Validate question set before starting interactive session
+    _SUPPORTED_TYPES = {QuestionType.FORCED_CHOICE, QuestionType.OPEN_SCENARIO}
+    unsupported = [q for q in questions if q.type not in _SUPPORTED_TYPES]
+    if unsupported:
+        types = {q.type.value for q in unsupported}
+        ids = [q.id for q in unsupported]
+        print(f"Error: question set contains unsupported types: {types}")
+        print(f"  Affected questions: {ids}")
+        print(f"  Supported types: {[t.value for t in _SUPPORTED_TYPES]}")
+        sys.exit(1)
+
     # Present questions interactively
     answers = []
     phases = sorted(set(q.phase for q in questions))
@@ -706,11 +717,6 @@ def cmd_bootstrap(args):
                     question_id=q.id, type=q.type,
                     free_text=text, domain=q.domain, tags=q.tags,
                 ))
-
-            else:
-                print(f"  ERROR: Question type '{q.type.value}' is not supported by bootstrap.")
-                print(f"  Supported types: forced_choice, open_scenario.")
-                print(f"  Skipping question {q.id}.")
 
             print()
 
