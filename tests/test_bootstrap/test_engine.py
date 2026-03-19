@@ -480,3 +480,50 @@ class TestFailLoud:
         llm = _make_mock_llm()
         with pytest.raises(ValueError, match="not a valid DomainEnum"):
             BootstrapEngine(llm, questions=bad_questions)
+
+    def test_duplicate_question_id_rejected(self) -> None:
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+
+        qs = [
+            BootstrapQuestion(id="dup", phase=1, type=QuestionType.FORCED_CHOICE,
+                              question="Q1?", options=["A", "B"],
+                              axes={"risk_tolerance": [-0.5, 0.5]}),
+            BootstrapQuestion(id="dup", phase=1, type=QuestionType.FORCED_CHOICE,
+                              question="Q2?", options=["C", "D"],
+                              axes={"action_threshold": [-0.5, 0.5]}),
+        ]
+        with pytest.raises(ValueError, match="Duplicate question ID"):
+            BootstrapEngine(_make_mock_llm(), questions=qs)
+
+    def test_forced_choice_no_options_rejected(self) -> None:
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+
+        qs = [
+            BootstrapQuestion(id="no-opts", phase=1, type=QuestionType.FORCED_CHOICE,
+                              question="Pick?", options=[],
+                              axes={"risk_tolerance": []}),
+        ]
+        with pytest.raises(ValueError, match="has no options"):
+            BootstrapEngine(_make_mock_llm(), questions=qs)
+
+    def test_axes_push_count_mismatch_rejected(self) -> None:
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+
+        qs = [
+            BootstrapQuestion(id="bad-axes", phase=1, type=QuestionType.FORCED_CHOICE,
+                              question="Pick?", options=["A", "B", "C"],
+                              axes={"risk_tolerance": [-0.5, 0.5]}),  # 2 pushes, 3 options
+        ]
+        with pytest.raises(ValueError, match="pushes.*options.*must match"):
+            BootstrapEngine(_make_mock_llm(), questions=qs)
+
+    def test_phase1_no_axes_rejected(self) -> None:
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+
+        qs = [
+            BootstrapQuestion(id="no-axes", phase=1, type=QuestionType.FORCED_CHOICE,
+                              question="Pick?", options=["A", "B"],
+                              axes={}),  # Phase 1 requires axes
+        ]
+        with pytest.raises(ValueError, match="Phase 1.*no axes"):
+            BootstrapEngine(_make_mock_llm(), questions=qs)

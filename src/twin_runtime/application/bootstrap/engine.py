@@ -61,17 +61,30 @@ def validate_bootstrap_questions(questions: List[BootstrapQuestion]) -> None:
     Checks:
     1. All question types are supported (no SLIDER etc.)
     2. All domain strings map to valid DomainEnum values or known aliases
+    3. No duplicate question IDs
+    4. FORCED_CHOICE questions must have options
+    5. Axes push counts must match options count
+    6. Phase 1 FORCED_CHOICE must have axes
 
     Raises ValueError with a clear message on first failure.
     Call this at the CLI entry point (before interactive session) and
     again at engine init (defense-in-depth).
     """
+    seen_ids: set = set()
     for q in questions:
+        # Duplicate ID check
+        if q.id in seen_ids:
+            raise ValueError(f"Duplicate question ID '{q.id}'")
+        seen_ids.add(q.id)
+
+        # Unsupported type
         if q.type not in _SUPPORTED_QUESTION_TYPES:
             raise ValueError(
                 f"Question '{q.id}' uses unsupported type '{q.type.value}'. "
                 f"Supported: {[t.value for t in _SUPPORTED_QUESTION_TYPES]}"
             )
+
+        # Invalid domain
         if q.domain and q.domain not in _DEFAULT_DOMAIN_MAP:
             try:
                 DomainEnum(q.domain)
@@ -80,6 +93,23 @@ def validate_bootstrap_questions(questions: List[BootstrapQuestion]) -> None:
                     f"Question '{q.id}' uses domain '{q.domain}' which is not a valid "
                     f"DomainEnum value. Valid: {[d.value for d in DomainEnum]}. "
                     f"Aliases: {list(_DEFAULT_DOMAIN_MAP.keys())}"
+                )
+
+        # FORCED_CHOICE structural checks
+        if q.type == QuestionType.FORCED_CHOICE:
+            if not q.options:
+                raise ValueError(
+                    f"Question '{q.id}' is FORCED_CHOICE but has no options"
+                )
+            for axis_name, pushes in q.axes.items():
+                if len(pushes) != len(q.options):
+                    raise ValueError(
+                        f"Question '{q.id}' axis '{axis_name}' has {len(pushes)} pushes "
+                        f"but {len(q.options)} options — must match"
+                    )
+            if q.phase == 1 and not q.axes:
+                raise ValueError(
+                    f"Question '{q.id}' is Phase 1 FORCED_CHOICE but has no axes mapping"
                 )
 
 
