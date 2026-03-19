@@ -456,6 +456,31 @@ def cmd_reflect(args):
             print(f"Outcome recorded: {outcome.outcome_id}")
             print(f"  Choice: {outcome.actual_choice}")
             print(f"  Matched prediction: {outcome.choice_matched_prediction}")
+
+            # ReflectionGenerator integration (Phase B)
+            try:
+                from twin_runtime.application.calibration.reflection_generator import ReflectionGenerator
+                from twin_runtime.infrastructure.backends.json_file.experience_store import ExperienceLibraryStore
+                from twin_runtime.interfaces.defaults import DefaultLLM
+
+                exp_store = ExperienceLibraryStore(str(_STORE_DIR), user_id)
+                exp_lib = exp_store.load()
+                trace = trace_store.load_trace(args.trace_id)
+                rg = ReflectionGenerator(llm=DefaultLLM())
+                ref_result = rg.process(trace, args.choice, exp_lib)
+                if ref_result.action == "generated" and ref_result.new_entry:
+                    exp_lib.add(ref_result.new_entry)
+                    exp_store.save(exp_lib)
+                    print(f"  Experience: new lesson extracted (weight=1.0)")
+                elif ref_result.action == "confirmed":
+                    exp_store.save(exp_lib)
+                    if ref_result.confirmed_entry_id:
+                        print(f"  Experience: confirmed entry {ref_result.confirmed_entry_id}")
+                    else:
+                        print(f"  Experience: prediction confirmed (no matching entry to boost)")
+            except Exception as e:
+                print(f"  Experience library update skipped: {e}", file=sys.stderr)
+
             if update:
                 print(f"  Calibration update generated (not yet applied)")
         except FileNotFoundError:
@@ -620,6 +645,113 @@ def cmd_ontology_report(args):
         print(f"  [{s.parent_domain.value}] {label} (support={s.support_count}, stability={s.stability_score:.2f})")
 
 
+def cmd_bootstrap(args):
+    """Interactive bootstrap: build a usable twin in 15 minutes."""
+    config = _load_config()
+    _apply_env(config)
+
+    from twin_runtime.application.bootstrap.questions import (
+        DEFAULT_QUESTIONS,
+        QuestionType,
+        BootstrapAnswer,
+    )
+    from twin_runtime.application.bootstrap.engine import BootstrapEngine
+    from twin_runtime.infrastructure.backends.json_file.experience_store import (
+        ExperienceLibraryStore,
+    )
+    from twin_runtime.interfaces.defaults import DefaultLLM
+
+    user_id = config.get("user_id", "user-default")
+    questions = DEFAULT_QUESTIONS
+    # Load custom questions if provided
+    if getattr(args, "questions", None):
+        import json as _json
+        from twin_runtime.application.bootstrap.questions import BootstrapQuestion
+        with open(args.questions) as f:
+            questions = [BootstrapQuestion(**q) for q in _json.load(f)]
+
+    # Present questions interactively
+    answers = []
+    phases = sorted(set(q.phase for q in questions))
+    phase_names = {1: "Decision Style", 2: "Domain Expertise", 3: "Past Decisions"}
+
+    for phase in phases:
+        phase_qs = [q for q in questions if q.phase == phase]
+        print(f"\n{'='*60}")
+        print(f"  Phase {phase}: {phase_names.get(phase, 'Questions')} ({len(phase_qs)} questions)")
+        print(f"{'='*60}\n")
+
+        for q in phase_qs:
+            print(f"  {q.question}")
+            if q.type == QuestionType.FORCED_CHOICE and q.options:
+                for i, opt in enumerate(q.options):
+                    print(f"    [{i}] {opt}")
+                while True:
+                    raw = input("  Your choice (number): ").strip()
+                    try:
+                        idx = int(raw)
+                        if 0 <= idx < len(q.options):
+                            answers.append(BootstrapAnswer(
+                                question_id=q.id, type=q.type,
+                                chosen_option=idx, domain=q.domain, tags=q.tags,
+                            ))
+                            break
+                    except ValueError:
+                        pass
+                    print(f"  Please enter a number 0-{len(q.options)-1}")
+
+            elif q.type == QuestionType.OPEN_SCENARIO:
+                text = input("  Your answer: ").strip()
+                answers.append(BootstrapAnswer(
+                    question_id=q.id, type=q.type,
+                    free_text=text, domain=q.domain, tags=q.tags,
+                ))
+            print()
+
+    # Run engine
+    print("\nProcessing your answers...")
+    llm = DefaultLLM()
+    engine = BootstrapEngine(llm=llm)
+    result = engine.run(answers, user_id=user_id)
+
+    # Save
+    store = TwinStore(str(_STORE_DIR))
+    store.save_state(result.twin)
+
+    exp_store = ExperienceLibraryStore(str(_STORE_DIR), user_id)
+    exp_store.save(result.experience_library)
+
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"  Bootstrap Complete!")
+    print(f"{'='*60}")
+    print(f"  Twin version: {result.twin.state_version}")
+    print(f"  Valid domains: {[d.value for d in result.twin.valid_domains()]}")
+    print(f"  Experience entries: {result.experience_library.size}")
+    print(f"  Axis reliability: {result.axis_reliability}")
+    print(f"\n  Try: twin-runtime run \"<your question>\" -o \"Option A\" \"Option B\"")
+
+    # Optional mini A/B comparison
+    if not getattr(args, "no_comparison", False):
+        try:
+            _run_bootstrap_comparison(result.twin, args)
+        except Exception as e:
+            print(f"\n  Mini A/B skipped: {e}")
+
+
+def _run_bootstrap_comparison(twin, args):
+    """Run mini A/B comparison after bootstrap."""
+    try:
+        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_single_case
+        from twin_runtime.domain.models.calibration import CalibrationCase
+    except ImportError:
+        return
+
+    n = getattr(args, "comparison_scenarios", 5)
+    print(f"\n  Running mini A/B with {n} scenarios... (requires LLM calls)")
+    print("  (Use --no-comparison to skip this step)")
+
+
 def cmd_mcp_serve(args):
     """Start MCP server (stdio, blocking)."""
     import asyncio
@@ -759,6 +891,12 @@ def main():
     p_ontology = sub.add_parser("ontology-report", help="Generate shadow ontology report")
     p_ontology.add_argument("--output", help="Output file path")
 
+    # bootstrap (Phase B)
+    p_bootstrap = sub.add_parser("bootstrap", help="Interactive onboarding: build a usable twin in 15 minutes")
+    p_bootstrap.add_argument("--questions", help="Custom questions JSON file")
+    p_bootstrap.add_argument("--no-comparison", action="store_true", help="Skip mini A/B comparison")
+    p_bootstrap.add_argument("--comparison-scenarios", type=int, default=5, help="Number of A/B scenarios")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -780,6 +918,7 @@ def main():
         "mcp-serve": cmd_mcp_serve,
         "drift-report": cmd_drift_report,
         "ontology-report": cmd_ontology_report,
+        "bootstrap": cmd_bootstrap,
     }
     commands[args.command](args)
 

@@ -76,6 +76,7 @@ def deliberation_loop(
     guard_result: Optional[ScopeGuardResult] = None,
     max_iterations: int = 2,
     micro_calibrate: bool = False,
+    experience_library=None,  # Optional[ExperienceLibrary] — forward compat
 ) -> RuntimeDecisionTrace:
     """Run bounded deliberation: initial pass + up to max_iterations rounds."""
     seen_hashes: Set[str] = set()

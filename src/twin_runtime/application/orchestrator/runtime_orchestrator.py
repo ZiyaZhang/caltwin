@@ -27,6 +27,7 @@ def run(
     *,
     llm: Optional[LLMPort] = None,
     evidence_store: Optional[EvidenceStore] = None,
+    experience_library=None,  # Optional[ExperienceLibrary]
     micro_calibrate: bool = False,
     max_deliberation_rounds: int = 2,
     force_path: Optional[ExecutionPath] = None,
@@ -72,12 +73,25 @@ def run(
             guard_result=guard_result,
             max_iterations=max_deliberation_rounds,
             micro_calibrate=micro_calibrate,
+            experience_library=experience_library,
         )
 
     else:
         # NO_EXECUTION but not FORCE_REFUSE shouldn't happen, but handle gracefully
         trace = _build_refusal_trace(query, frame, guard_result, route, twin)
         return trace
+
+    # 6b. S2-only post-synthesis consistency check
+    if (route.execution_path == ExecutionPath.S2_DELIBERATE
+            and experience_library is not None):
+        from twin_runtime.application.pipeline.consistency_checker import ConsistencyChecker
+        checker = ConsistencyChecker(llm=llm)
+        consistency = checker.check(trace, experience_library)
+        trace.consistency_check_passed = consistency.is_consistent
+        trace.consistency_note = consistency.note
+        trace.conflicting_experience_ids = consistency.conflicting_experience_ids
+        if not consistency.is_consistent:
+            trace.uncertainty = min(trace.uncertainty + consistency.confidence_penalty, 0.95)
 
     # 7. FORCE_DEGRADE -- only downgrades answerable results, NEVER overrides REFUSED
     if (route.boundary_policy == BoundaryPolicy.FORCE_DEGRADE

@@ -97,6 +97,16 @@ class RuntimeDecisionTrace(BaseModel):
     terminated_by: Optional[str] = Field(default=None, description="TerminationReason value")
     deliberation_round_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     shadow_scores: Optional[Dict[str, float]] = Field(default=None)
+    # ConsistencyChecker audit fields (Phase B)
+    consistency_check_passed: Optional[bool] = Field(
+        default=None, description="ConsistencyChecker result (S2 only, None if not run)"
+    )
+    consistency_note: Optional[str] = Field(
+        default=None, description="ConsistencyChecker explanation"
+    )
+    conflicting_experience_ids: Optional[List[str]] = Field(
+        default=None, description="Experience IDs that conflicted with decision"
+    )
 
 
 class RuntimeEvent(BaseModel):
