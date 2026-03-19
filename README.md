@@ -152,6 +152,7 @@ twin-runtime dashboard --output fidelity_report.html --open
 | `twin-runtime dashboard` | Generate HTML fidelity report |
 | `twin-runtime drift-report` | Detect preference and confidence drift |
 | `twin-runtime ontology-report` | Generate shadow ontology suggestions |
+| `twin-runtime compare` | Run A/B baseline comparison (table/json/html) |
 | `twin-runtime install-skills` | Install Claude Code skills |
 | `twin-runtime mcp-serve` | Start MCP server (stdio) |
 

@@ -87,6 +87,8 @@ def ask_json(
     user: str,
     model: str | None = None,
     max_tokens: int = 2048,
+    *,
+    temperature: float | None = None,
 ) -> Dict[str, Any]:
     """Send a prompt and parse the response as JSON.
 
@@ -104,11 +106,14 @@ def ask_json(
 
 IMPORTANT: Respond with ONLY a JSON object. No explanation, no markdown formatting, no text before or after. Just the raw JSON starting with {{ and ending with }}."""
 
-    resp = client.messages.create(
+    kwargs: Dict[str, Any] = dict(
         model=model or _DEFAULT_MODEL,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": combined_user}],
     )
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    resp = client.messages.create(**kwargs)
     return _extract_json(resp.content[0].text)
 
 
@@ -117,6 +122,8 @@ def ask_text(
     user: str,
     model: str | None = None,
     max_tokens: int = 1024,
+    *,
+    temperature: float | None = None,
 ) -> str:
     """Send a prompt and return raw text."""
     client = get_client()
@@ -128,11 +135,14 @@ def ask_text(
 
 {user}"""
 
-    resp = client.messages.create(
+    kwargs: Dict[str, Any] = dict(
         model=model or _DEFAULT_MODEL,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": combined_user}],
     )
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    resp = client.messages.create(**kwargs)
     return resp.content[0].text.strip()
 
 
@@ -144,6 +154,7 @@ def ask_structured(
     schema_name: str = "structured_output",
     model: str | None = None,
     max_tokens: int = 2048,
+    temperature: float | None = None,
 ) -> Dict[str, Any]:
     """Send a prompt and get structured output via Anthropic tool_use.
 
@@ -165,13 +176,16 @@ def ask_structured(
 {user}"""
 
     try:
-        resp = client.messages.create(
+        kwargs: Dict[str, Any] = dict(
             model=model or _DEFAULT_MODEL,
             max_tokens=max_tokens,
             tools=[tool_def],
             tool_choice={"type": "tool", "name": schema_name},
             messages=[{"role": "user", "content": combined_user}],
         )
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        resp = client.messages.create(**kwargs)
         for block in resp.content:
             if getattr(block, "type", None) == "tool_use":
                 return block.input
@@ -179,4 +193,4 @@ def ask_structured(
     except (anthropic.BadRequestError, anthropic.APIStatusError, RuntimeError) as exc:
         import logging
         logging.getLogger(__name__).warning("tool_use failed (%s), falling back to ask_json", exc)
-        return ask_json(system, user, model=model, max_tokens=max_tokens)
+        return ask_json(system, user, model=model, max_tokens=max_tokens, temperature=temperature)
