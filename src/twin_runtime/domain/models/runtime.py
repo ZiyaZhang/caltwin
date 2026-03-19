@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
+from typing_extensions import TypedDict
+
 from pydantic import BaseModel, Field
 
 from twin_runtime.domain.models.primitives import (
@@ -16,6 +18,26 @@ from twin_runtime.domain.models.primitives import (
     confidence_field,
     uncertainty_field,
 )
+
+
+class SituationFrameSnapshot(TypedDict, total=False):
+    """JSON-safe snapshot of SituationFrame at decision time."""
+
+    frame_id: str
+    domain_activation_vector: Dict[str, float]
+    situation_feature_vector: Dict[str, Any]
+    ambiguity_score: float
+    clarification_questions: List[str]
+    scope_status: str
+    routing_confidence: float
+
+
+class ScopeGuardSnapshot(TypedDict, total=False):
+    """Deterministic scope guard output snapshot."""
+
+    restricted_hit: bool
+    non_modeled_hit: bool
+    matched_terms: List[str]
 
 
 class HeadAssessment(BaseModel):
@@ -77,11 +99,11 @@ class RuntimeDecisionTrace(BaseModel):
     )
     created_at: datetime
     query: str = Field(default="", description="Original decision query")
-    situation_frame: Optional[Dict[str, Any]] = Field(
+    situation_frame: Optional[SituationFrameSnapshot] = Field(
         default=None,
         description="JSON-safe snapshot of SituationFrame at decision time",
     )
-    scope_guard_result: Optional[Dict[str, Any]] = Field(
+    scope_guard_result: Optional[ScopeGuardSnapshot] = Field(
         default=None,
         description="Deterministic scope guard output",
     )

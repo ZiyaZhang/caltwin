@@ -7,7 +7,10 @@ import pytest
 
 from twin_runtime.domain.models import TwinState
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+from tests.helpers import FIXTURES_DIR, make_situation_frame, make_twin  # noqa: F401
+
+# Re-export for any modules that import from conftest via pytest's plugin system.
+__all__ = ["make_situation_frame", "make_twin"]
 
 
 @pytest.fixture

@@ -27,6 +27,7 @@ class TerminationReason(str, Enum):
     NO_NEW_EVIDENCE = "no_new_evidence"
     CONFIDENCE_PLATEAU = "confidence_plateau"
     MAX_ITERATIONS = "max_iterations"
+    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
 class RouteDecision(BaseModel):

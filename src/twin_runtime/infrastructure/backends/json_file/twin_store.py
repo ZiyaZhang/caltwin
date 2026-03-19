@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from twin_runtime.domain.models.twin_state import TwinState
+from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
@@ -53,7 +54,7 @@ class TwinStore:
         version = twin.state_version
         path = self._version_path(twin.user_id, version)
         data = twin.model_dump_json(indent=2)
-        path.write_text(data, encoding="utf-8")
+        atomic_write(path, data)
 
         current = self._current_path(twin.user_id)
         shutil.copy2(path, current)

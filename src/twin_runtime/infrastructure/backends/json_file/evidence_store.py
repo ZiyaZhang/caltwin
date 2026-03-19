@@ -1,10 +1,17 @@
 """JSON file implementation of EvidenceStore protocol."""
 from __future__ import annotations
 
+import json
+import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
+
+from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
 from twin_runtime.domain.evidence.base import EvidenceFragment
 from twin_runtime.domain.evidence.clustering import EvidenceCluster
 from twin_runtime.domain.models.recall_query import RecallQuery
@@ -32,7 +39,7 @@ class JsonFileEvidenceStore:
         existing = self.get_by_hash(fragment.content_hash)
         if existing is None:
             path = self.base / "fragments" / f"{fragment.content_hash}.json"
-            path.write_text(fragment.model_dump_json(indent=2))
+            atomic_write(path, fragment.model_dump_json(indent=2))
         elif existing.source_type != fragment.source_type:
             from twin_runtime.domain.evidence.clustering import EvidenceCluster
             import uuid
@@ -49,12 +56,12 @@ class JsonFileEvidenceStore:
         else:
             if fragment.confidence > existing.confidence:
                 path = self.base / "fragments" / f"{fragment.content_hash}.json"
-                path.write_text(fragment.model_dump_json(indent=2))
+                atomic_write(path, fragment.model_dump_json(indent=2))
         return fragment.content_hash
 
     def store_cluster(self, cluster: EvidenceCluster) -> str:
         path = self.base / "clusters" / f"{cluster.cluster_id}.json"
-        path.write_text(cluster.model_dump_json(indent=2))
+        atomic_write(path, cluster.model_dump_json(indent=2))
         return cluster.cluster_id
 
     def query(self, recall_query: RecallQuery) -> List[EvidenceFragment]:
@@ -64,7 +71,11 @@ class JsonFileEvidenceStore:
             try:
                 frag = EvidenceFragment.model_validate_json(p.read_text())
                 fragments.append(frag)
-            except Exception:
+            except json.JSONDecodeError:
+                logger.warning("Corrupted JSON in evidence fragment file: %s", p)
+                continue
+            except ValidationError:
+                logger.warning("Invalid schema in evidence fragment file: %s", p)
                 continue
 
         # Filter by domain (EvidenceFragment uses domain_hint)

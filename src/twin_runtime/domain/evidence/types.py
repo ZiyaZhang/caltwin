@@ -21,7 +21,7 @@ class DecisionEvidence(EvidenceFragment):
 
     evidence_type: Literal[EvidenceType.DECISION] = EvidenceType.DECISION
     option_set: List[str] = Field(default_factory=list)
-    chosen: str = ""
+    chosen: str
     reasoning: Optional[str] = None
     stakes: Optional[OrdinalTriLevel] = None
     outcome_known: bool = False
@@ -40,8 +40,8 @@ class PreferenceEvidence(EvidenceFragment):
     """User expressed a preference along some dimension."""
 
     evidence_type: Literal[EvidenceType.PREFERENCE] = EvidenceType.PREFERENCE
-    dimension: str = ""
-    direction: str = ""
+    dimension: str
+    direction: str
     strength: float = Field(default=0.5, ge=0.0, le=1.0)
     preference_context: Optional[str] = None
 
@@ -59,8 +59,8 @@ class BehaviorEvidence(EvidenceFragment):
     """Observed behavioral pattern."""
 
     evidence_type: Literal[EvidenceType.BEHAVIOR] = EvidenceType.BEHAVIOR
-    action_type: str = ""
-    pattern: str = ""
+    action_type: str
+    pattern: str
     frequency: Optional[str] = None
     structured_metrics: Dict[str, Any] = Field(default_factory=dict)
 
@@ -78,9 +78,9 @@ class ReflectionEvidence(EvidenceFragment):
     """User's self-reflection or retrospective."""
 
     evidence_type: Literal[EvidenceType.REFLECTION] = EvidenceType.REFLECTION
-    topic: str = ""
+    topic: str
     sentiment: Optional[str] = None
-    insight: str = ""
+    insight: str
     references_decision: Optional[str] = None
 
     def _compute_content_hash(self) -> str:
@@ -98,7 +98,7 @@ class InteractionStyleEvidence(EvidenceFragment):
 
     evidence_type: Literal[EvidenceType.INTERACTION_STYLE] = EvidenceType.INTERACTION_STYLE
     style_markers: List[str] = Field(default_factory=list)
-    style_context: str = ""
+    style_context: str
 
     def _compute_content_hash(self) -> str:
         parts = [
@@ -113,8 +113,8 @@ class ContextEvidence(EvidenceFragment):
     """Background context: role, environment, tools, relationships."""
 
     evidence_type: Literal[EvidenceType.CONTEXT] = EvidenceType.CONTEXT
-    context_category: str = ""
-    description: str = ""
+    context_category: str
+    description: str
 
     def _compute_content_hash(self) -> str:
         parts = [

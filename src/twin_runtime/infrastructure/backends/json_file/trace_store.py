@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
+from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
@@ -26,7 +27,7 @@ class JsonFileTraceStore:
     def save_trace(self, trace: RuntimeDecisionTrace) -> str:
         _validate_safe_id(trace.trace_id, "trace_id")
         path = self.base / f"{trace.trace_id}.json"
-        path.write_text(trace.model_dump_json(indent=2))
+        atomic_write(path, trace.model_dump_json(indent=2))
         return trace.trace_id
 
     def load_trace(self, trace_id: str) -> RuntimeDecisionTrace:

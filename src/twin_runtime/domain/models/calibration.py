@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional
 
+from typing_extensions import TypedDict
+
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from twin_runtime.domain.models.primitives import (
@@ -176,10 +178,26 @@ class OutcomeRecord(BaseModel):
         return self
 
 
+class CorrectionScope(TypedDict, total=False):
+    """Scope targeting for a bias correction."""
+
+    domain: str
+    task_type: str
+    situation_features: Dict[str, str]
+
+
+class CorrectionPayload(TypedDict, total=False):
+    """Payload describing the correction to apply."""
+
+    instruction: str
+    adjustment_type: str
+    magnitude: float
+
+
 class BiasCorrectionSuggestion(BaseModel):
-    target_scope: Dict[str, Any]
+    target_scope: CorrectionScope
     correction_action: BiasCorrectionAction
-    correction_payload: Dict[str, Any] = Field(default_factory=dict)
+    correction_payload: CorrectionPayload = Field(default_factory=dict)
     rationale: str
 
 

@@ -1,44 +1,28 @@
 """Tests for runtime orchestrator: S1/S2 routing, refusal, degradation, force_path."""
-import json
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
 
+from tests.helpers import make_situation_frame, make_twin
 from twin_runtime.application.orchestrator.models import (
     BoundaryPolicy, ExecutionPath, RouteDecision,
 )
 from twin_runtime.application.orchestrator.runtime_orchestrator import run
 from twin_runtime.application.pipeline.scope_guard import ScopeGuardResult
 from twin_runtime.domain.models.primitives import (
-    DecisionMode, DomainEnum, OptionStructure, OrdinalTriLevel, ScopeStatus, UncertaintyType,
+    DecisionMode, DomainEnum, ScopeStatus,
 )
 from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
-from twin_runtime.domain.models.situation import SituationFeatureVector, SituationFrame
-from twin_runtime.domain.models.twin_state import TwinState
 
 
 def _twin():
-    return TwinState(**json.loads(Path("tests/fixtures/sample_twin_state.json").read_text()))
+    return make_twin()
 
 
 def _frame(scope=ScopeStatus.IN_SCOPE, stakes="medium", ambiguity=0.3, domains=None):
-    return SituationFrame(
-        frame_id="test-frame",
-        domain_activation_vector=domains if domains is not None else {DomainEnum.WORK: 0.9},
-        situation_feature_vector=SituationFeatureVector(
-            reversibility=OrdinalTriLevel.MEDIUM,
-            stakes=OrdinalTriLevel(stakes),
-            uncertainty_type=UncertaintyType.MIXED,
-            controllability=OrdinalTriLevel.MEDIUM,
-            option_structure=OptionStructure.CHOOSE_EXISTING,
-        ),
-        ambiguity_score=ambiguity,
-        scope_status=scope,
-        routing_confidence=0.8,
-    )
+    return make_situation_frame(scope=scope, stakes=stakes, ambiguity=ambiguity, domains=domains)
 
 
 def _mock_trace(

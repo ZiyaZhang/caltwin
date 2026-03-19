@@ -1,6 +1,7 @@
 """Bounded deliberation loop: retrieve -> activate -> arbitrate -> check convergence."""
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
@@ -56,10 +57,13 @@ def check_termination(
     if latest.new_unique_evidence_count == 0:
         return TerminationReason.NO_NEW_EVIDENCE
 
-    # 3. CONFIDENCE_PLATEAU
-    prev = round_summaries[-2]
-    if (abs(latest.avg_head_confidence - prev.avg_head_confidence) < 0.05
-            and not latest.top_choice_changed):
+    # 3. CONFIDENCE_PLATEAU — detect via stddev of last 3 rounds (catches oscillation)
+    window = round_summaries[-3:] if len(round_summaries) >= 3 else round_summaries[-2:]
+    confidences = [s.avg_head_confidence for s in window]
+    mean = sum(confidences) / len(confidences)
+    variance = sum((c - mean) ** 2 for c in confidences) / len(confidences)
+    stddev = math.sqrt(variance)
+    if stddev < 0.03 and not latest.top_choice_changed:
         return TerminationReason.CONFIDENCE_PLATEAU
 
     return None
@@ -75,6 +79,7 @@ def deliberation_loop(
     evidence_store: Optional[EvidenceStore] = None,
     guard_result: Optional[ScopeGuardResult] = None,
     max_iterations: int = 2,
+    max_total_evidence: int = 50,
     micro_calibrate: bool = False,
     experience_library=None,  # Optional[ExperienceLibrary] — forward compat
 ) -> RuntimeDecisionTrace:
@@ -125,6 +130,11 @@ def deliberation_loop(
         unique_new = [e for e in new_evidence if e.content_hash not in seen_hashes]
         seen_hashes.update(e.content_hash for e in unique_new)
         cumulative_evidence.extend(unique_new)
+
+        # Evidence budget check
+        if len(cumulative_evidence) > max_total_evidence:
+            termination = TerminationReason.BUDGET_EXHAUSTED
+            break
 
         # Re-activate with cumulative evidence
         context = EnrichedActivationContext(
@@ -179,7 +189,8 @@ def deliberation_loop(
     # Applies to NO_NEW_EVIDENCE, MAX_ITERATIONS, and CONFIDENCE_PLATEAU when conflict persists
     if (termination in (TerminationReason.NO_NEW_EVIDENCE,
                         TerminationReason.MAX_ITERATIONS,
-                        TerminationReason.CONFIDENCE_PLATEAU)
+                        TerminationReason.CONFIDENCE_PLATEAU,
+                        TerminationReason.BUDGET_EXHAUSTED)
             and conflict is not None
             and not conflict.resolvable_by_system):
         trace.decision_mode = DecisionMode.REFUSED

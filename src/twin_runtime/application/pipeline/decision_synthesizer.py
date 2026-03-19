@@ -30,18 +30,33 @@ def _compute_option_scores(assessments, frame, option_set=None):
 
     all_phantom = False
     if option_set:
-        valid_options = {o.lower().strip(): o for o in option_set}
+        # Build case-insensitive lookup: normalized -> original option string.
+        # Iterate in order so the FIRST occurrence wins if option_set has
+        # entries that differ only by case (unlikely but defensive).
+        norm_to_canonical = {}
+        for o in option_set:
+            key = o.lower().strip()
+            if key not in norm_to_canonical:
+                norm_to_canonical[key] = o
+
+        # Accumulate scores under the original (canonical) option key
         filtered_scores = {}
         for opt, score in option_scores.items():
             normalized = opt.lower().strip()
-            if normalized in valid_options:
-                canonical = valid_options[normalized]
+            if normalized in norm_to_canonical:
+                canonical = norm_to_canonical[normalized]
                 filtered_scores[canonical] = filtered_scores.get(canonical, 0.0) + score
+
         if not filtered_scores:
+            # All LLM options were phantom — assign equal floor scores.
+            # No 0.01 penalty since there are no real scores to compare against.
             all_phantom = True
             for opt in option_set:
                 filtered_scores[opt] = 0.01
         else:
+            # Only add floor score for missing options when there ARE
+            # non-phantom options; this prevents the penalty from flipping
+            # close rankings.
             for opt in option_set:
                 if opt not in filtered_scores:
                     filtered_scores[opt] = 0.01
