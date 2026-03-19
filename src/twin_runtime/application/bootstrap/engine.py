@@ -52,6 +52,37 @@ _DEFAULT_DOMAIN_MAP: Dict[str, DomainEnum] = {
 }
 
 
+_SUPPORTED_QUESTION_TYPES = {QuestionType.FORCED_CHOICE, QuestionType.OPEN_SCENARIO}
+
+
+def validate_bootstrap_questions(questions: List[BootstrapQuestion]) -> None:
+    """Validate a question set before starting bootstrap.
+
+    Checks:
+    1. All question types are supported (no SLIDER etc.)
+    2. All domain strings map to valid DomainEnum values or known aliases
+
+    Raises ValueError with a clear message on first failure.
+    Call this at the CLI entry point (before interactive session) and
+    again at engine init (defense-in-depth).
+    """
+    for q in questions:
+        if q.type not in _SUPPORTED_QUESTION_TYPES:
+            raise ValueError(
+                f"Question '{q.id}' uses unsupported type '{q.type.value}'. "
+                f"Supported: {[t.value for t in _SUPPORTED_QUESTION_TYPES]}"
+            )
+        if q.domain and q.domain not in _DEFAULT_DOMAIN_MAP:
+            try:
+                DomainEnum(q.domain)
+            except ValueError:
+                raise ValueError(
+                    f"Question '{q.id}' uses domain '{q.domain}' which is not a valid "
+                    f"DomainEnum value. Valid: {[d.value for d in DomainEnum]}. "
+                    f"Aliases: {list(_DEFAULT_DOMAIN_MAP.keys())}"
+                )
+
+
 def _build_domain_map(questions: List[BootstrapQuestion]) -> Dict[str, DomainEnum]:
     """Build domain mapping from question set.
 
@@ -132,6 +163,7 @@ class BootstrapEngine:
     ) -> None:
         self._llm = llm
         self._questions = questions if questions is not None else DEFAULT_QUESTIONS
+        validate_bootstrap_questions(self._questions)
         self._question_map: Dict[str, BootstrapQuestion] = {
             q.id: q for q in self._questions
         }

@@ -655,7 +655,7 @@ def cmd_bootstrap(args):
         QuestionType,
         BootstrapAnswer,
     )
-    from twin_runtime.application.bootstrap.engine import BootstrapEngine
+    from twin_runtime.application.bootstrap.engine import BootstrapEngine, validate_bootstrap_questions
     from twin_runtime.infrastructure.backends.json_file.experience_store import (
         ExperienceLibraryStore,
     )
@@ -670,15 +670,11 @@ def cmd_bootstrap(args):
         with open(args.questions) as f:
             questions = [BootstrapQuestion(**q) for q in _json.load(f)]
 
-    # Validate question set before starting interactive session
-    _SUPPORTED_TYPES = {QuestionType.FORCED_CHOICE, QuestionType.OPEN_SCENARIO}
-    unsupported = [q for q in questions if q.type not in _SUPPORTED_TYPES]
-    if unsupported:
-        types = {q.type.value for q in unsupported}
-        ids = [q.id for q in unsupported]
-        print(f"Error: question set contains unsupported types: {types}")
-        print(f"  Affected questions: {ids}")
-        print(f"  Supported types: {[t.value for t in _SUPPORTED_TYPES]}")
+    # Validate question set before starting interactive session (fail-early)
+    try:
+        validate_bootstrap_questions(questions)
+    except ValueError as e:
+        print(f"Error: invalid question set — {e}")
         sys.exit(1)
 
     # Present questions interactively

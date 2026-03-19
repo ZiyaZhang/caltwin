@@ -114,3 +114,48 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "sk-1234567890abcdef" not in captured.out
         assert "..." in captured.out
+
+
+class TestBootstrapValidation:
+    """Test that cmd_bootstrap rejects invalid question sets before interactive session."""
+
+    def test_unsupported_type_exits(self, tmp_config, capsys, tmp_path):
+        """SLIDER in custom questions → sys.exit(1) before any interactive input."""
+        import json as _json
+        from twin_runtime.application.bootstrap.questions import QuestionType
+
+        bad_qs = [{
+            "id": "slider-q1", "phase": 1, "type": "slider",
+            "question": "Rate your risk?", "options": [], "axes": {},
+            "tags": ["risk"],
+        }]
+        qpath = tmp_path / "bad_questions.json"
+        qpath.write_text(_json.dumps(bad_qs))
+
+        _save_config({"user_id": "test-user"})
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["twin-runtime", "bootstrap", "--questions", str(qpath)]):
+                main()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "unsupported type" in captured.out.lower() or "slider" in captured.out.lower()
+
+    def test_invalid_domain_exits(self, tmp_config, capsys, tmp_path):
+        """Custom domain not in DomainEnum → sys.exit(1) before any interactive input."""
+        import json as _json
+
+        bad_qs = [{
+            "id": "domain-q1", "phase": 2, "type": "forced_choice",
+            "question": "How good?", "options": ["Good", "Bad"],
+            "axes": {}, "domain": "alien_domain", "tags": ["alien"],
+        }]
+        qpath = tmp_path / "bad_questions.json"
+        qpath.write_text(_json.dumps(bad_qs))
+
+        _save_config({"user_id": "test-user"})
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["twin-runtime", "bootstrap", "--questions", str(qpath)]):
+                main()
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "alien_domain" in captured.out
