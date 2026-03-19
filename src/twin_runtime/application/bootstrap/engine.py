@@ -56,17 +56,20 @@ def _build_domain_map(questions: List[BootstrapQuestion]) -> Dict[str, DomainEnu
     """Build domain mapping from question set.
 
     Uses _DEFAULT_DOMAIN_MAP for known domains, and attempts DomainEnum(value)
-    for custom domain strings. Unknown domains are mapped to the closest match
-    or skipped (will be treated as undeclared).
+    for custom domain strings. Raises ValueError for unrecognized domains
+    so custom question sets fail loud instead of silently producing empty twins.
     """
     result = dict(_DEFAULT_DOMAIN_MAP)
     for q in questions:
         if q.domain and q.domain not in result:
-            # Try direct enum match
             try:
                 result[q.domain] = DomainEnum(q.domain)
             except ValueError:
-                pass  # Custom domain not in DomainEnum — will be undeclared
+                raise ValueError(
+                    f"Custom question '{q.id}' uses domain '{q.domain}' which is not a valid "
+                    f"DomainEnum value. Valid domains: {[d.value for d in DomainEnum]}. "
+                    f"Known aliases: {list(_DEFAULT_DOMAIN_MAP.keys())}"
+                )
     return result
 
 
@@ -138,6 +141,14 @@ class BootstrapEngine:
 
     def run(self, answers: List[BootstrapAnswer], user_id: str) -> BootstrapResult:
         """Execute the full bootstrap pipeline."""
+        # Validate: reject unsupported answer types early
+        for ans in answers:
+            if ans.type == QuestionType.SLIDER:
+                raise ValueError(
+                    f"SLIDER questions are not yet supported by BootstrapEngine "
+                    f"(question_id={ans.question_id}). Use FORCED_CHOICE or OPEN_SCENARIO."
+                )
+
         # 1. Extract axes from Phase 1 forced-choice
         raw_axes = self._extract_axes(answers)
         axis_values = self._compute_axis_values(raw_axes)
