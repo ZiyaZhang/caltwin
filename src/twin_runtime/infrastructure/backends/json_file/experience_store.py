@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from twin_runtime.domain.models.experience import ExperienceLibrary
+from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
@@ -33,4 +34,4 @@ class ExperienceLibraryStore:
 
     def save(self, library: ExperienceLibrary) -> None:
         """Write the library to JSON."""
-        self._path.write_text(library.model_dump_json(indent=2))
+        atomic_write(self._path, library.model_dump_json(indent=2))

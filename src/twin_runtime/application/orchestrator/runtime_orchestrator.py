@@ -1,6 +1,7 @@
 """Runtime orchestrator: owns interpretation, routes to S1/S2, assembles trace."""
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -18,6 +19,8 @@ from twin_runtime.domain.models.runtime import RuntimeDecisionTrace
 from twin_runtime.domain.models.twin_state import TwinState
 from twin_runtime.domain.ports.evidence_store import EvidenceStore
 from twin_runtime.domain.ports.llm_port import LLMPort
+
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -59,22 +62,38 @@ def run(
 
     # 5. S1_DIRECT -> single pass
     if route.execution_path == ExecutionPath.S1_DIRECT:
-        trace = execute_from_frame_once(
-            frame, query, option_set, twin,
-            llm=llm, evidence_store=evidence_store,
-            guard_result=guard_result, micro_calibrate=micro_calibrate,
-        )
+        try:
+            trace = execute_from_frame_once(
+                frame, query, option_set, twin,
+                llm=llm, evidence_store=evidence_store,
+                guard_result=guard_result, micro_calibrate=micro_calibrate,
+            )
+        except Exception:
+            logger.exception("S1_DIRECT execution failed for query: %s", query)
+            trace = _build_error_trace(
+                query, option_set, frame, guard_result, route, twin,
+                error_context="S1_DIRECT",
+            )
+            return trace
 
     # 6. S2_DELIBERATE -> deliberation loop
     elif route.execution_path == ExecutionPath.S2_DELIBERATE:
-        trace = deliberation_loop(
-            frame, query, option_set, twin,
-            llm=llm, evidence_store=evidence_store,
-            guard_result=guard_result,
-            max_iterations=max_deliberation_rounds,
-            micro_calibrate=micro_calibrate,
-            experience_library=experience_library,
-        )
+        try:
+            trace = deliberation_loop(
+                frame, query, option_set, twin,
+                llm=llm, evidence_store=evidence_store,
+                guard_result=guard_result,
+                max_iterations=max_deliberation_rounds,
+                micro_calibrate=micro_calibrate,
+                experience_library=experience_library,
+            )
+        except Exception:
+            logger.exception("S2_DELIBERATE execution failed for query: %s", query)
+            trace = _build_error_trace(
+                query, option_set, frame, guard_result, route, twin,
+                error_context="S2_DELIBERATE",
+            )
+            return trace
 
     else:
         # NO_EXECUTION but not FORCE_REFUSE shouldn't happen, but handle gracefully
@@ -192,6 +211,38 @@ def _assign_refusal_reason(trace, frame, guard_result):
     elif trace.decision_mode == DecisionMode.DEGRADED:
         if trace.refusal_reason_code is None:
             trace.refusal_reason_code = "DEGRADED_SCOPE"
+
+
+def _build_error_trace(
+    query: str,
+    option_set: List[str],
+    frame,
+    guard_result: Optional[ScopeGuardResult],
+    route: RouteDecision,
+    twin: TwinState,
+    *,
+    error_context: str = "unknown",
+) -> RuntimeDecisionTrace:
+    """Build a REFUSED trace when an execution path raises an unhandled exception."""
+    return RuntimeDecisionTrace(
+        trace_id=str(uuid.uuid4()),
+        twin_state_version=twin.state_version,
+        situation_frame_id=frame.frame_id,
+        activated_domains=[],
+        head_assessments=[],
+        final_decision=f"Internal error during {error_context} execution. The twin cannot produce a reliable answer.",
+        decision_mode=DecisionMode.REFUSED,
+        uncertainty=1.0,
+        query=query,
+        situation_frame=frame.model_dump(mode="json"),
+        scope_guard_result=_guard_to_dict(guard_result),
+        route_path=route.execution_path.value,
+        route_reason_codes=route.reason_codes,
+        boundary_policy=route.boundary_policy.value,
+        shadow_scores=route.shadow_scores,
+        refusal_reason_code="INTERNAL_ERROR",
+        created_at=datetime.now(timezone.utc),
+    )
 
 
 def _guard_to_dict(guard_result):

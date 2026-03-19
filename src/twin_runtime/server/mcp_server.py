@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import json
 import asyncio
+import logging
 import sys
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Tool definitions (shared by both SDK and fallback paths)
@@ -164,7 +167,8 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
             result["terminated_by"] = trace.terminated_by
         return json.dumps(result, indent=2, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": "Error running twin_decide: %s" % e})
+        logger.exception("Error running twin_decide")
+        return json.dumps({"error": "Internal error in twin_decide. Check server logs."})
 
 
 async def _handle_status(args: Dict[str, Any]) -> str:
@@ -197,7 +201,8 @@ async def _handle_status(args: Dict[str, Any]) -> str:
         }
         return json.dumps(status, indent=2, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        logger.exception("Error fetching twin_status")
+        return json.dumps({"error": "Internal error in twin_status. Check server logs."})
 
 
 async def _handle_reflect(args: Dict[str, Any]) -> str:
@@ -252,7 +257,8 @@ async def _handle_reflect(args: Dict[str, Any]) -> str:
 
         return json.dumps(result, indent=2, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": "Error recording outcome: %s" % e})
+        logger.exception("Error recording outcome in twin_reflect")
+        return json.dumps({"error": "Internal error in twin_reflect. Check server logs."})
 
 
 def _save_standalone_outcome(cal_store, choice, reasoning, trace_id, user_id):
@@ -314,7 +320,8 @@ async def _handle_calibrate(args: Dict[str, Any]) -> str:
             result["abstention_accuracy"] = evaluation.abstention_accuracy
         return json.dumps(result, indent=2, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": "Error running calibrate: %s" % e})
+        logger.exception("Error running twin_calibrate")
+        return json.dumps({"error": "Internal error in twin_calibrate. Check server logs."})
 
 
 async def _handle_history(args: Dict[str, Any]) -> str:
@@ -345,7 +352,8 @@ async def _handle_history(args: Dict[str, Any]) -> str:
 
         return json.dumps({"traces": traces, "count": len(traces)}, indent=2, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"error": "Error listing history: %s" % e})
+        logger.exception("Error listing twin_history")
+        return json.dumps({"error": "Internal error in twin_history. Check server logs."})
 
 
 _TOOL_HANDLERS = {
@@ -498,8 +506,9 @@ class _StdioMCPServer:
                     "content": [{"type": "text", "text": text}],
                 })
             except Exception as e:
+                logger.exception("Error dispatching tool call: %s", tool_name)
                 return self._result(msg_id, {
-                    "content": [{"type": "text", "text": "Error: %s" % e}],
+                    "content": [{"type": "text", "text": "Internal error executing tool. Check server logs."}],
                     "isError": True,
                 })
 

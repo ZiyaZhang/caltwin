@@ -15,5 +15,5 @@ from .twin_state import (
     TwinState,
 )
 from .situation import SituationFeatureVector, SituationFrame
-from .runtime import ConflictReport, HeadAssessment, RuntimeDecisionTrace, RuntimeEvent
-from .calibration import CalibrationCase, CandidateCalibrationCase, TwinEvaluation
+from .runtime import ConflictReport, HeadAssessment, RuntimeDecisionTrace, RuntimeEvent, ScopeGuardSnapshot, SituationFrameSnapshot
+from .calibration import CalibrationCase, CandidateCalibrationCase, CorrectionPayload, CorrectionScope, TwinEvaluation

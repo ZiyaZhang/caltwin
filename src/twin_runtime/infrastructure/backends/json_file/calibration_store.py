@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from pathlib import Path
 from datetime import datetime
@@ -17,6 +15,7 @@ def _validate_safe_id(value: str, label: str = "ID") -> str:
         raise ValueError(f"Unsafe {label} for filesystem use: {value!r}")
     return value
 
+from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
 from twin_runtime.domain.models.calibration import (
     CalibrationCase, CandidateCalibrationCase, TwinEvaluation,
     OutcomeRecord, DetectedBias, TwinFidelityScore,
@@ -44,7 +43,7 @@ class CalibrationStore:
 
     def save_candidate(self, candidate: CandidateCalibrationCase) -> str:
         path = self.base / "candidates" / f"{candidate.candidate_id}.json"
-        path.write_text(candidate.model_dump_json(indent=2))
+        atomic_write(path, candidate.model_dump_json(indent=2))
         return candidate.candidate_id
 
     def load_candidate(self, candidate_id: str) -> CandidateCalibrationCase:
@@ -63,7 +62,7 @@ class CalibrationStore:
 
     def save_case(self, case: CalibrationCase) -> str:
         path = self.base / "cases" / f"{case.case_id}.json"
-        path.write_text(case.model_dump_json(indent=2))
+        atomic_write(path, case.model_dump_json(indent=2))
         return case.case_id
 
     def load_case(self, case_id: str) -> CalibrationCase:
@@ -82,7 +81,7 @@ class CalibrationStore:
 
     def save_evaluation(self, evaluation: TwinEvaluation) -> str:
         path = self.base / "evaluations" / f"{evaluation.evaluation_id}.json"
-        path.write_text(evaluation.model_dump_json(indent=2))
+        atomic_write(path, evaluation.model_dump_json(indent=2))
         return evaluation.evaluation_id
 
     def list_evaluations(self) -> List[TwinEvaluation]:
@@ -96,7 +95,7 @@ class CalibrationStore:
 
     def save_event(self, event: RuntimeEvent) -> str:
         path = self.base / "events" / f"{event.event_id}.json"
-        path.write_text(event.model_dump_json(indent=2))
+        atomic_write(path, event.model_dump_json(indent=2))
         return event.event_id
 
     def list_events(self, since: Optional[datetime] = None) -> List[RuntimeEvent]:
@@ -112,7 +111,7 @@ class CalibrationStore:
 
     def save_outcome(self, outcome: OutcomeRecord) -> str:
         path = self.base / "outcomes" / f"{outcome.outcome_id}.json"
-        path.write_text(outcome.model_dump_json(indent=2))
+        atomic_write(path, outcome.model_dump_json(indent=2))
         return outcome.outcome_id
 
     def list_outcomes(self, trace_id: Optional[str] = None) -> List[OutcomeRecord]:
@@ -128,7 +127,7 @@ class CalibrationStore:
 
     def save_detected_bias(self, bias: DetectedBias) -> str:
         path = self.base / "detected_biases" / f"{bias.bias_id}.json"
-        path.write_text(bias.model_dump_json(indent=2))
+        atomic_write(path, bias.model_dump_json(indent=2))
         return bias.bias_id
 
     def list_detected_biases(self, status: Optional[DetectedBiasStatus] = None) -> List[DetectedBias]:
@@ -144,7 +143,7 @@ class CalibrationStore:
 
     def save_fidelity_score(self, score: TwinFidelityScore) -> str:
         path = self.base / "fidelity_scores" / f"{score.score_id}.json"
-        path.write_text(score.model_dump_json(indent=2))
+        atomic_write(path, score.model_dump_json(indent=2))
         return score.score_id
 
     def list_fidelity_scores(self, limit: int = 10) -> List[TwinFidelityScore]:

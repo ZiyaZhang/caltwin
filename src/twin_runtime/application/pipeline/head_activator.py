@@ -48,13 +48,25 @@ _HEAD_ASSESSMENT_SCHEMA: Dict[str, Any] = {
 }
 
 
+def _sanitize_evidence(text: str, max_length: int = 500) -> str:
+    """Strip prompt-injection patterns and truncate evidence text."""
+    # Remove common injection patterns
+    sanitized = text.replace("<", "&lt;").replace(">", "&gt;")
+    # Truncate to prevent oversized payloads
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 def _format_evidence(evidence: List[EvidenceFragment]) -> str:
-    """Format evidence fragments for LLM prompt injection."""
+    """Format evidence fragments for inclusion in LLM prompts (sanitized)."""
     if not evidence:
         return ""
     lines = []
     for i, frag in enumerate(evidence, 1):
-        lines.append(f"{i}. [{frag.evidence_type.value}] {frag.summary} (confidence: {frag.confidence:.2f})")
+        safe_summary = _sanitize_evidence(frag.summary)
+        safe_type = _sanitize_evidence(frag.evidence_type.value, max_length=100)
+        lines.append(f"{i}. [{safe_type}] {safe_summary} (confidence: {frag.confidence:.2f})")
     return "\n".join(lines)
 
 
@@ -98,9 +110,13 @@ def _build_head_prompt(
     bias_corrections: Optional[List[BiasCorrectionEntry]] = None,
 ) -> tuple[str, str]:
     """Build system + user prompts for a single domain head assessment."""
-    system = f"""You are a decision-assessment module for the "{head.domain.value}" domain.
-You evaluate options strictly from the perspective of this domain's goals: {head.goal_axes}.
-Priority order: {head.default_priority_order or head.goal_axes}.
+    safe_domain = _sanitize_evidence(head.domain.value, max_length=100)
+    safe_goal_axes = [_sanitize_evidence(str(g), max_length=100) for g in head.goal_axes]
+    safe_priority = [_sanitize_evidence(str(p), max_length=100) for p in (head.default_priority_order or head.goal_axes)]
+
+    system = f"""You are a decision-assessment module for the "{safe_domain}" domain.
+You evaluate options strictly from the perspective of this domain's goals: {safe_goal_axes}.
+Priority order: {safe_priority}.
 
 The person you model has these decision parameters:
 - Risk tolerance: {core.risk_tolerance}
@@ -127,7 +143,7 @@ Use these alongside the persona parameters to inform your assessment."""
         for bc in bias_corrections:
             instruction = bc.correction_payload.get("instruction", "")
             if instruction:
-                correction_lines.append(f"- {instruction}")
+                correction_lines.append(f"- {_sanitize_evidence(instruction, max_length=300)}")
         if correction_lines:
             system += f"""
 

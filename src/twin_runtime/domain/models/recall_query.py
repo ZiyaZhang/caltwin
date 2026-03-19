@@ -1,10 +1,22 @@
 """RecallQuery: typed evidence retrieval queries."""
 from __future__ import annotations
+import warnings
 from datetime import datetime
 from typing import List, Literal, Optional, Tuple
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from twin_runtime.domain.models.primitives import DomainEnum
 from twin_runtime.domain.evidence.base import EvidenceType
+
+# Mapping from query_type to the parameter name it expects.
+_QUERY_TYPE_EXPECTED_PARAM: dict[str, str] = {
+    "by_topic": "topic_keywords",
+    "by_domain": "target_domain",
+    "by_evidence_type": "target_evidence_type",
+    "decisions_about": "decision_topic",
+    "preference_on_axis": "preference_dimension",
+    "state_trajectory": "state_variable",
+    "similar_situations": "situation_description",
+}
 
 
 class RecallQuery(BaseModel):
@@ -27,3 +39,22 @@ class RecallQuery(BaseModel):
     preference_dimension: Optional[str] = None
     state_variable: Optional[str] = None
     situation_description: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_parameter_consistency(self) -> RecallQuery:
+        """Warn when query-type-specific parameters are missing."""
+        expected = _QUERY_TYPE_EXPECTED_PARAM.get(self.query_type)
+        if expected is None:
+            # by_timeline has no dedicated parameter — nothing to check.
+            return self
+        value = getattr(self, expected)
+        # For list fields (topic_keywords), also treat an empty list as missing.
+        missing = value is None or (isinstance(value, list) and len(value) == 0)
+        if missing:
+            warnings.warn(
+                f"RecallQuery with query_type={self.query_type!r} is missing "
+                f"expected parameter '{expected}'. Results may be incomplete.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self

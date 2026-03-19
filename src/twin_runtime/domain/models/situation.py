@@ -42,6 +42,11 @@ class SituationFrame(BaseModel):
     )
     situation_feature_vector: SituationFeatureVector
 
+    ambiguity_score: float = confidence_field()
+    clarification_questions: List[str] = Field(default_factory=list)
+    scope_status: ScopeStatus
+    routing_confidence: float = confidence_field()
+
     @model_validator(mode="after")
     def _validate_activation_weights(self):
         for domain, weight in self.domain_activation_vector.items():
@@ -50,7 +55,3 @@ class SituationFrame(BaseModel):
                     f"domain_activation_vector[{domain.value}]={weight} is out of range [0.0, 1.0]"
                 )
         return self
-    ambiguity_score: float = confidence_field()
-    clarification_questions: List[str] = Field(default_factory=list)
-    scope_status: ScopeStatus
-    routing_confidence: float = confidence_field()

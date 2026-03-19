@@ -200,7 +200,7 @@ def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[S
     for d, kw_score in keyword_hints.items():
         raw_activation[d] = raw_activation.get(d, 0.0) + kw_score * 0.2
 
-    ambiguity = float(llm_result.get("ambiguity_score", 0.5))
+    ambiguity = min(1.0, max(0.0, float(llm_result.get("ambiguity_score", 0.5))))
 
     # Stage 3: routing policy
     filtered_activation, scope_status, routing_confidence = _apply_routing_policy(
