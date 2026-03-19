@@ -10,9 +10,9 @@
 
 **Key design decisions:**
 - ExperienceLibrary is a standalone JSON file at `~/.twin-runtime/store/{user_id}/experience_library.json`, parallel to TwinState
-- Bootstrap sets `min_reliability_threshold = 0.35` in scope_declaration so that user-declared domains (head_reliability=0.4) are immediately usable; undeclared domains stay at 0.3 (below threshold). scope_declaration.user_facing_summary notes this is a "bootstrap-provisional" state. Contradictory axes → head_reliability 0.3 (below threshold, forces DEGRADE)
+- Bootstrap sets `min_reliability_threshold = 0.35` in scope_declaration so that user-declared domains (head_reliability=0.4) are immediately usable; undeclared domains stay at 0.3 (below threshold). scope_declaration.user_facing_summary notes this is a "bootstrap-provisional" state. Contradictory axes → the affected domain's `head_reliability` is set to 0.3 (below threshold 0.35), mechanically gated out by `memory_access_planner._compute_domain_gating()` and `TwinState.valid_domains()`, which forces DEGRADE/REFUSE at runtime
 - ReflectionGenerator: CF-hit → 0 LLM calls (confirmation only); CF-miss → 1 LLM call (extraction)
-- ConsistencyChecker: S2 only, never changes recommended option, only adjusts uncertainty + annotates. Hooks as a post-synthesis step in `runtime_orchestrator.py` after `deliberation_loop()` returns the final trace — NOT in `single_pass.py`
+- ConsistencyChecker: S2 only, never changes recommended option, only adjusts uncertainty and writes audit data to new trace fields. Hooks as a post-synthesis step in `runtime_orchestrator.py` after `deliberation_loop()` returns the final trace — NOT in `single_pass.py`. Audit data lands in 3 new Optional fields on `RuntimeDecisionTrace`: `consistency_check_passed` (Optional[bool]), `consistency_note` (Optional[str]), `conflicting_experience_ids` (Optional[List[str]])
 - 12 forced-choice answers are NOT stored as 12 individual ExperienceEntries. Instead they are aggregated into 3-5 "bootstrap principles" (one per axis cluster, LLM-synthesized). Only open narratives (Phase 3) and subsequent reflect-miss produce concrete experience entries
 - `ExperienceEntry.weight` starts at 0.9 (bootstrap principle), 0.8 (narrative), 1.0 (reflect-miss)
 - Bootstrap builds a full valid `TwinState` from scratch (no fixture file needed)
@@ -38,6 +38,7 @@
 | Create | `tests/test_consistency_checker.py` | ConsistencyChecker tests |
 | Modify | `src/twin_runtime/cli.py` | Add `bootstrap` command |
 | Modify | `src/twin_runtime/cli.py` | Integrate ReflectionGenerator into `cmd_reflect` |
+| Modify | `src/twin_runtime/domain/models/runtime.py` | Add consistency audit fields to RuntimeDecisionTrace |
 | Modify | `src/twin_runtime/application/orchestrator/runtime_orchestrator.py` | Hook ConsistencyChecker post-S2-synthesis + pass experience_library |
 | Modify | `src/twin_runtime/application/orchestrator/deliberation.py` | Accept + forward experience_library |
 | Modify | `README.md` | Add bootstrap + experience library docs |
@@ -101,13 +102,13 @@ Create `src/twin_runtime/application/bootstrap/engine.py`:
 - `BootstrapResult`: twin (TwinState), experience_library (ExperienceLibrary), axis_reliability (Dict[str, float])
 
 - `BootstrapEngine(llm: LLMPort)`:
-  - `run(answers: List[BootstrapAnswer]) -> BootstrapResult`
+  - `run(answers: List[BootstrapAnswer], user_id: str) -> BootstrapResult` — user_id is required, passed through to `_build_twin_state()` for TwinState.id and TwinState.user_id. CLI reads user_id from config and passes it explicitly
   - `_extract_axes(answers) -> Dict[str, List[float]]`: collect axis pushes from forced-choice answers
   - `_compute_axis_values(raw_axes) -> Dict[str, float]`: mean + 0.5 base, clamp [0.0, 1.0]
-  - `_check_consistency(raw_axes) -> Dict[str, float]`: if same-axis answers have opposite signs → reliability 0.3, else 0.5
+  - `_check_consistency(raw_axes) -> Dict[str, float]`: if same-axis answers have opposite signs → returns per-axis contradiction flags
   - `_infer_conflict_style(answers) -> ConflictStyle`: map from conflict-related forced-choice answers
   - `_build_shared_decision_core(axis_values, axis_reliability) -> SharedDecisionCore`
-  - `_build_domain_heads(answers) -> List[DomainHead]`: from Phase 2 answers; user-declared domains get head_reliability=0.4, undeclared domains get 0.3
+  - `_build_domain_heads(answers, contradicted_axes) -> List[DomainHead]`: from Phase 2 answers; user-declared domains get head_reliability=0.4, undeclared domains get 0.3. If a domain's primary axis is contradicted, its head_reliability is downgraded to 0.3 (below threshold 0.35, mechanically gated out by `valid_domains()` and `_compute_domain_gating()`)
   - `_aggregate_bootstrap_principles(answers, axis_values) -> List[ExperienceEntry]`: 1 LLM call that takes ALL 12 forced-choice answers + computed axis values, synthesizes 3-5 bootstrap principles (one per axis cluster). Each principle is a reusable decision rule, not a per-question fragment. weight=0.9, entry_kind="principle"
   - `_extract_from_narrative(answer: BootstrapAnswer) -> List[ExperienceEntry]`: 1 LLM call per open-ended answer. weight=0.8, entry_kind="narrative"
   - `_build_initial_experiences(answers, axis_values) -> ExperienceLibrary`: calls _aggregate_bootstrap_principles + _extract_from_narrative
@@ -142,7 +143,7 @@ Add `cmd_bootstrap(args)`:
 1. Load config, create LLM client
 2. Present questions interactively (Phase 1 → 2 → 3)
 3. Collect `BootstrapAnswer` list
-4. Run `BootstrapEngine.run(answers)` → BootstrapResult
+4. Run `BootstrapEngine.run(answers, user_id=config["user_id"])` → BootstrapResult
 5. Save TwinState via `TwinStore.save_state()`
 6. Save ExperienceLibrary via `ExperienceLibraryStore.save()`
 7. If `--run-comparison` (default True): load comparison scenarios, run mini A/B with `ComparisonExecutor` (N scenarios, default 5), print table
@@ -176,8 +177,8 @@ Create `src/twin_runtime/application/calibration/reflection_generator.py`:
 - `ReflectionGenerator(llm: LLMPort)`:
   - `process(trace: RuntimeDecisionTrace, ground_truth: str, exp_lib: ExperienceLibrary) -> ReflectionResult`
   - Logic:
-    - `was_correct = _check_correct(trace, ground_truth)`: fuzzy match trace.final_decision against ground_truth (reuses choice_similarity from fidelity_evaluator)
-    - If correct: search exp_lib via `search_entries()` (NOT `search()`) for matching entries, increment `confirmation_count` on best match **only if kind="entry"** (typed result guarantees this), return "confirmed"
+    - `was_correct = _check_correct(trace, ground_truth)`: extracts `prediction_ranking` from the highest-confidence head assessment (same pattern as `outcome_tracker.py:28-31`), then calls `choice_similarity(ranking, ground_truth)` from `fidelity_evaluator`. Hit = rank==1. This ensures ReflectionGenerator and outcome_tracker always agree on hit/miss for the same trace
+    - If correct: search exp_lib via `search_entries()` (NOT `search()`) for matching entries, increment `confirmation_count` on best match (entries only, never patterns), return "confirmed"
     - If incorrect: call LLM to extract `ExperienceEntry` from the miss, return "generated" with new_entry (weight=1.0, entry_kind="reflection")
   - `_generate_entry(trace, ground_truth) -> ExperienceEntry`: 1 LLM call with prompt containing query, recommended, actual, reasoning excerpt. Returns structured ExperienceEntry
 
@@ -216,6 +217,16 @@ Create `src/twin_runtime/application/pipeline/consistency_checker.py`:
     5. If deterministic check passes → return is_consistent=True (0 LLM calls)
     6. If ambiguous → 1 LLM call for fine-grained check → return result with confidence_penalty
 
+**Pre-requisite — Add audit fields to RuntimeDecisionTrace:**
+
+Modify `src/twin_runtime/domain/models/runtime.py`:
+- Add 3 new Optional fields to `RuntimeDecisionTrace`:
+  ```python
+  consistency_check_passed: Optional[bool] = Field(default=None, description="ConsistencyChecker result (S2 only)")
+  consistency_note: Optional[str] = Field(default=None, description="ConsistencyChecker explanation")
+  conflicting_experience_ids: Optional[List[str]] = Field(default=None, description="Experience IDs that conflicted")
+  ```
+
 **Integration point — S2 post-synthesis hook in `runtime_orchestrator.py`:**
 
 Modify `src/twin_runtime/application/orchestrator/runtime_orchestrator.py`:
@@ -228,14 +239,17 @@ Modify `src/twin_runtime/application/orchestrator/runtime_orchestrator.py`:
       from twin_runtime.application.pipeline.consistency_checker import ConsistencyChecker
       checker = ConsistencyChecker(llm=llm)
       consistency = checker.check(trace, experience_library)
+      trace.consistency_check_passed = consistency.is_consistent
+      trace.consistency_note = consistency.note
+      trace.conflicting_experience_ids = consistency.conflicting_experience_ids
       if not consistency.is_consistent:
           trace.uncertainty = min(trace.uncertainty + consistency.confidence_penalty, 0.95)
   ```
-- For S1 paths: no change, consistency checker is never invoked
+- For S1 paths: no change, consistency checker is never invoked, audit fields stay None
 - **DO NOT modify `single_pass.py`** — the checker hooks at the orchestrator level, not inside the single-pass executor
 
 Modify `src/twin_runtime/application/orchestrator/deliberation.py`:
-- Add `experience_library` parameter to `deliberation_loop()`, forward to trace metadata for audit
+- Add `experience_library` parameter to `deliberation_loop()`, store in trace metadata for audit (no logic change — just pass-through for future use)
 
 Tests: `tests/test_consistency_checker.py`:
 - No relevant experiences → consistent (0 LLM calls)
@@ -269,14 +283,16 @@ Commit: `"docs: update README for Phase B bootstrap protocol"`
 - [ ] `twin-runtime bootstrap` builds valid TwinState from scratch
 - [ ] 12 forced-choice + 5 domain + 3 open-ended = 20 questions (Phase 1-3)
 - [ ] Axis values: 0.5 base + mean(pushes), clamped [0.0, 1.0]
-- [ ] Contradictory same-axis answers → reliability 0.3 (below threshold, forces DEGRADE)
-- [ ] User-declared domains → head_reliability 0.4, undeclared → 0.3
+- [ ] Contradictory same-axis answers → affected domain's head_reliability set to 0.3, mechanically gated out by valid_domains() and _compute_domain_gating()
+- [ ] User-declared domains → head_reliability 0.4, undeclared → 0.3, contradicted → 0.3
 - [ ] scope_declaration.min_reliability_threshold = 0.35 so declared domains pass valid_domains()
 - [ ] 12 forced-choice → 3-5 aggregated bootstrap principles (NOT 12 individual entries)
 - [ ] ExperienceLibrary initial entries: ~5 principles (weight 0.9) + ~3 narratives (weight 0.8) = ~8
 - [ ] `twin-runtime reflect` CF miss → new ExperienceEntry (weight 1.0, entry_kind="reflection")
+- [ ] ReflectionGenerator._check_correct() uses prediction_ranking from head_assessments + choice_similarity() (same as outcome_tracker)
 - [ ] `twin-runtime reflect` CF hit → confirmation_count += 1 on `search_entries()` best match only
 - [ ] ReflectionGenerator never confirms PatternInsight pseudo-results (uses search_entries, not search)
+- [ ] ConsistencyChecker writes audit to trace.consistency_check_passed / consistency_note / conflicting_experience_ids
 - [ ] ConsistencyChecker hooks in `runtime_orchestrator.py` after `deliberation_loop()`, NOT in `single_pass.py`
 - [ ] ConsistencyChecker only triggers on S2 paths
 - [ ] ConsistencyChecker never changes final_decision, only adjusts uncertainty
@@ -300,3 +316,11 @@ Commit: `"docs: update README for Phase B bootstrap protocol"`
 4. **Phase 4 document upload deferred** — DocumentAdapter requires explicit file paths, not Q&A answers. The plan had half-defined Phase 4 with no clear CLI flow. Deferred to future iteration rather than shipping incomplete.
 
 5. **Forced-choice → aggregated principles (was: 12 entries → now: 3-5 principles)** — Storing 12 per-question fragments pollutes the experience library with low-context axis questionnaire shards. Fix: 1 LLM call aggregates all 12 forced-choice answers into 3-5 reusable decision principles (one per axis cluster). Only open narratives and reflect-miss produce concrete experience entries. Library starts at ~8 high-quality entries instead of ~17 noisy ones.
+
+6. **ConsistencyChecker audit fields (v3)** — "annotates" had no landing zone in RuntimeDecisionTrace. Fix: add 3 Optional fields (`consistency_check_passed`, `consistency_note`, `conflicting_experience_ids`) to RuntimeDecisionTrace so audit data is persisted in trace JSON, not just logged.
+
+7. **ReflectionGenerator correctness check (v3)** — Plan said "fuzzy match trace.final_decision" but `choice_similarity()` takes `prediction_ranking: list[str]`, not natural language. And outcome_tracker already extracts ranking from head_assessments. Fix: ReflectionGenerator._check_correct() now extracts prediction_ranking from highest-confidence head assessment (same as outcome_tracker.py:28-31), then calls choice_similarity(ranking, ground_truth). Single source of truth for hit/miss.
+
+8. **Contradictory axes mechanically downgrade domain head_reliability (v3)** — Previous wording said "reliability 0.3 forces DEGRADE" but didn't specify WHERE. The actual gating happens in `_compute_domain_gating()` via `head_reliability >= min_reliability_threshold`. Fix: _build_domain_heads() now takes contradicted_axes and sets affected domain's head_reliability to 0.3, which is mechanically below threshold 0.35.
+
+9. **BootstrapEngine.run() accepts user_id (v3)** — run(answers) had no way to get user_id to _build_twin_state(). Fix: `run(answers, user_id)`. CLI passes `config["user_id"]` explicitly. No config-reading inside engine.
