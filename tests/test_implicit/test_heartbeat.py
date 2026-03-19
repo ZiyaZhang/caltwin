@@ -311,21 +311,50 @@ def test_dedup_keeps_highest():
 
 
 # ---------------------------------------------------------------------------
+# Tests: Option discrimination (Issue 3)
+# ---------------------------------------------------------------------------
+
+def test_option_discrimination():
+    """Signal mentioning only one option should score that option higher.
+
+    If signal says "redis", only Redis should match — not Memcached.
+    Before the fix, trace_keywords would give both options similar scores.
+    """
+    t1 = _make_trace("t1", query="用 Redis 还是 Memcached", option_set=["Redis", "Memcached"])
+    reflector = _make_reflector(traces={"t1": t1})
+
+    # Signal only mentions Redis
+    best_option, score = reflector._best_option_match(t1, "added redis caching layer")
+    assert best_option == "Redis", f"Expected Redis, got {best_option}"
+    assert score > 0
+
+    # Verify Memcached does NOT get a high score from the same signal
+    # by checking what happens when we swap option order — result should still be Redis
+    t2 = _make_trace("t2", query="用 Redis 还是 Memcached", option_set=["Memcached", "Redis"])
+    best_option2, _ = reflector._best_option_match(t2, "added redis caching layer")
+    assert best_option2 == "Redis", f"Expected Redis regardless of option order, got {best_option2}"
+
+
+# ---------------------------------------------------------------------------
 # Tests: Auto-reflect / Queue
 # ---------------------------------------------------------------------------
 
 def test_auto_reflect_above_threshold():
-    """High confidence → auto_reflected count increases."""
+    """High confidence → _auto_reflect is called (not queued)."""
     t1 = _make_trace("t1", option_set=["Redis", "Memcached"])
-    reflector = _make_reflector(traces={"t1": t1})
+    reflector = _make_reflector(
+        traces={"t1": t1},
+        auto_reflect_threshold=0.3,  # low threshold so git match triggers auto-reflect
+    )
 
+    # "redis" in merge message → direct match to "Redis" option → confidence >= threshold
     mock_result = MagicMock(returncode=0, stdout="Merge: switch to redis caching")
     with patch("subprocess.run", return_value=mock_result):
         with patch.object(reflector, "_auto_reflect") as mock_ar:
             report = reflector.run()
 
-    # Should have called auto_reflect (PR merge = high confidence)
-    assert mock_ar.called or report.auto_reflected > 0 or report.queued > 0
+    assert mock_ar.called, "Expected _auto_reflect to be called for high-confidence match"
+    assert report.auto_reflected > 0, f"Expected auto_reflected > 0, got {report.auto_reflected}"
 
 
 def test_queue_below_threshold():
