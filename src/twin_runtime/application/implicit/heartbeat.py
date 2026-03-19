@@ -283,27 +283,46 @@ class HeartbeatReflector:
     ) -> tuple:
         """Find the best matching option from trace.option_set against signal text.
 
-        Returns (best_option, match_score) where score is 0-1 based on keyword overlap.
+        Returns (best_option, match_score) where score is 0-1.
+
+        Scoring strategy:
+        - Direct option text match → 1.0 (strongest signal)
+        - Option-specific keywords weighted 0.7, trace query keywords 0.3.
+          This prevents trace keywords (which contain ALL options) from
+          giving every option the same baseline score.
         """
         best_option = None
         best_score = 0.0
 
         trace_keywords = extract_keywords(trace.query)
+        # Remove option texts from trace_keywords to avoid cross-contamination:
+        # if query is "Redis or Memcached", both are in trace_keywords, so
+        # matching against either option gives the same trace_keyword score.
+        option_texts_lower = {opt.lower() for opt in trace.option_set}
 
         for option in trace.option_set:
             option_lower = option.lower()
-            option_keywords = extract_keywords(option)
-            all_keywords = option_keywords + trace_keywords
 
-            # Direct option text match
+            # Direct option text match — strongest signal
             if option_lower in signal_text:
                 score = 1.0
             else:
-                # Keyword overlap
-                if not all_keywords:
-                    continue
-                matches = sum(1 for kw in all_keywords if kw.lower() in signal_text)
-                score = matches / len(all_keywords) if all_keywords else 0.0
+                option_keywords = extract_keywords(option)
+                # Filter trace_keywords: remove keywords that are substrings of
+                # any option text (they don't help discriminate between options)
+                filtered_trace_kw = [
+                    kw for kw in trace_keywords
+                    if not any(kw.lower() in opt for opt in option_texts_lower)
+                ]
+
+                # Separate scoring: option keywords (weight 0.7) + context keywords (weight 0.3)
+                opt_matches = sum(1 for kw in option_keywords if kw.lower() in signal_text) if option_keywords else 0
+                ctx_matches = sum(1 for kw in filtered_trace_kw if kw.lower() in signal_text) if filtered_trace_kw else 0
+
+                opt_score = (opt_matches / len(option_keywords)) if option_keywords else 0.0
+                ctx_score = (ctx_matches / len(filtered_trace_kw)) if filtered_trace_kw else 0.0
+
+                score = 0.7 * opt_score + 0.3 * ctx_score
 
             if score > best_score:
                 best_score = score
@@ -316,14 +335,19 @@ class HeartbeatReflector:
     # ---------------------------------------------------------------
 
     def _auto_reflect(self, inf: InferredReflection) -> None:
-        """Record outcome + generate reflection for high-confidence inferences."""
+        """Record outcome + generate reflection for high-confidence inferences.
+
+        Loads a fresh exp_lib per call so that a failure in one auto_reflect
+        does not leave dirty in-memory state visible to subsequent calls.
+        Only saves exp_lib if the update actually mutated it.
+        """
         from twin_runtime.application.calibration.outcome_tracker import record_outcome
         from twin_runtime.application.calibration.reflection_generator import ReflectionGenerator
         from twin_runtime.application.calibration.experience_updater import ExperienceUpdater
 
         twin = self._twin_store.load_state(self._user_id)
-        exp_lib = self._experience_store.load()
 
+        # Step 1: record_outcome (writes to calibration_store — committed on success)
         outcome, _update = record_outcome(
             trace_id=inf.trace_id,
             actual_choice=inf.inferred_choice,
@@ -333,13 +357,18 @@ class HeartbeatReflector:
             calibration_store=self._calibration_store,
         )
 
+        # Step 2: reflection + experience update (load fresh, save only if mutated)
+        exp_lib = self._experience_store.load()
         trace = self._trace_store.load_trace(inf.trace_id)
         reflection = ReflectionGenerator(self._llm).process(
             trace, inf.inferred_choice, exp_lib,
         )
         if reflection.new_entry:
             ExperienceUpdater().update(reflection.new_entry, exp_lib)
-        self._experience_store.save(exp_lib)
+            self._experience_store.save(exp_lib)
+        elif reflection.action == "confirmed":
+            # confirmation_count may have been bumped by ReflectionGenerator._handle_hit
+            self._experience_store.save(exp_lib)
 
     def _queue_for_confirmation(self, inf: InferredReflection) -> None:
         """Write inference to pending queue file using atomic write."""

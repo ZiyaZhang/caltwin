@@ -104,12 +104,17 @@ def cmd_confirm(args):
         from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
         from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
         from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+        from twin_runtime.infrastructure.backends.json_file.experience_store import ExperienceLibraryStore
+        from twin_runtime.interfaces.defaults import DefaultLLM
         from twin_runtime.application.calibration.outcome_tracker import record_outcome
+        from twin_runtime.application.calibration.reflection_generator import ReflectionGenerator
+        from twin_runtime.application.calibration.experience_updater import ExperienceUpdater
         from twin_runtime.domain.models.primitives import OutcomeSource
 
         trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
         cal_store = CalibrationStore(str(_STORE_DIR), user_id)
         twin_store = TwinStore(str(_STORE_DIR))
+        exp_store = ExperienceLibraryStore(str(_STORE_DIR), user_id)
 
         try:
             twin = twin_store.load_state(user_id)
@@ -117,8 +122,79 @@ def cmd_confirm(args):
             print("Twin not initialized. Cannot accept reflections.")
             return
 
+        llm = DefaultLLM()
         accepted = 0
         for item in pending:
+            try:
+                outcome, _ = record_outcome(
+                    trace_id=item["trace_id"],
+                    actual_choice=item["inferred_choice"],
+                    source=OutcomeSource(item["signal_source"]),
+                    twin=twin,
+                    trace_store=trace_store,
+                    calibration_store=cal_store,
+                )
+
+                # Full reflection pipeline (same as _auto_reflect)
+                exp_lib = exp_store.load()
+                trace = trace_store.load_trace(item["trace_id"])
+                reflection = ReflectionGenerator(llm=llm).process(
+                    trace, item["inferred_choice"], exp_lib,
+                )
+                if reflection.new_entry:
+                    ExperienceUpdater().update(reflection.new_entry, exp_lib)
+                    exp_store.save(exp_lib)
+                elif reflection.action == "confirmed":
+                    exp_store.save(exp_lib)
+
+                accepted += 1
+            except Exception as e:
+                print(f"  Failed: {item['trace_id']}: {e}", file=sys.stderr)
+
+        # Clear queue
+        queue_path.write_text("[]")
+        print(f"Accepted {accepted}/{len(pending)} reflections (with experience updates). Queue cleared.")
+        return
+
+    # Interactive mode — accepted items are immediately reflected
+    from twin_runtime.infrastructure.backends.json_file.trace_store import JsonFileTraceStore
+    from twin_runtime.infrastructure.backends.json_file.calibration_store import CalibrationStore
+    from twin_runtime.infrastructure.backends.json_file.twin_store import TwinStore
+    from twin_runtime.infrastructure.backends.json_file.experience_store import ExperienceLibraryStore
+    from twin_runtime.interfaces.defaults import DefaultLLM
+    from twin_runtime.application.calibration.outcome_tracker import record_outcome
+    from twin_runtime.application.calibration.reflection_generator import ReflectionGenerator
+    from twin_runtime.application.calibration.experience_updater import ExperienceUpdater
+    from twin_runtime.domain.models.primitives import OutcomeSource
+
+    trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+    cal_store = CalibrationStore(str(_STORE_DIR), user_id)
+    twin_store = TwinStore(str(_STORE_DIR))
+    exp_store = ExperienceLibraryStore(str(_STORE_DIR), user_id)
+
+    try:
+        twin = twin_store.load_state(user_id)
+    except Exception:
+        print("Twin not initialized. Cannot accept reflections.")
+        return
+
+    llm = DefaultLLM()
+
+    print(f"{len(pending)} pending reflection(s). Accept each? (y/n/q)")
+    remaining = []
+    accepted = 0
+    for idx, item in enumerate(pending):
+        print(f"  [{item['signal_source']}] trace={item['trace_id']} "
+              f"choice={item['inferred_choice']} conf={item['confidence']:.2f}")
+        try:
+            answer = input("  Accept? (y/n/q): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            remaining.extend(pending[idx:])
+            break
+        if answer == "q":
+            remaining.extend(pending[idx:])
+            break
+        elif answer == "y":
             try:
                 record_outcome(
                     trace_id=item["trace_id"],
@@ -128,39 +204,29 @@ def cmd_confirm(args):
                     trace_store=trace_store,
                     calibration_store=cal_store,
                 )
+                # Reflection + experience update
+                exp_lib = exp_store.load()
+                trace = trace_store.load_trace(item["trace_id"])
+                reflection = ReflectionGenerator(llm=llm).process(
+                    trace, item["inferred_choice"], exp_lib,
+                )
+                if reflection.new_entry:
+                    ExperienceUpdater().update(reflection.new_entry, exp_lib)
+                    exp_store.save(exp_lib)
+                elif reflection.action == "confirmed":
+                    exp_store.save(exp_lib)
                 accepted += 1
+                print(f"  -> Accepted and reflected")
             except Exception as e:
-                print(f"  Failed: {item['trace_id']}: {e}", file=sys.stderr)
-
-        # Clear queue
-        queue_path.write_text("[]")
-        print(f"Accepted {accepted}/{len(pending)} reflections. Queue cleared.")
-        return
-
-    # Interactive mode
-    print(f"{len(pending)} pending reflection(s). Accept each? (y/n/q)")
-    remaining = []
-    for item in pending:
-        print(f"  [{item['signal_source']}] trace={item['trace_id']} "
-              f"choice={item['inferred_choice']} conf={item['confidence']:.2f}")
-        try:
-            answer = input("  Accept? (y/n/q): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            remaining.extend(pending[pending.index(item):])
-            break
-        if answer == "q":
-            remaining.append(item)
-            remaining.extend(pending[pending.index(item) + 1:])
-            break
-        elif answer == "y":
-            print(f"  → Accepted (will be reflected on next heartbeat)")
+                print(f"  -> Accept failed: {e}", file=sys.stderr)
+                remaining.append(item)
         else:
             remaining.append(item)
-            print(f"  → Skipped")
+            print(f"  -> Skipped")
 
     # Save remaining
     queue_path.write_text(json.dumps(remaining, indent=2, default=str))
-    print(f"Done. {len(remaining)} still pending.")
+    print(f"Done. {accepted} accepted, {len(remaining)} still pending.")
 
 
 def cmd_mine_patterns(args):

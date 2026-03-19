@@ -167,6 +167,26 @@ def test_hits_excluded():
     assert patterns == []  # Only 1 failure, below min_failures=2
 
 
+def test_none_domain_skipped():
+    """Outcomes with domain=None are skipped (Issue 7).
+
+    OutcomeRecord.domain is typed as DomainEnum (required), so None is not
+    normally possible. We test the defensive guard by monkey-patching.
+    """
+    llm = MagicMock()
+    miner = HardCaseMiner(llm, min_failures=2)
+
+    traces = [_make_trace("t1"), _make_trace("t2")]
+    outcomes = [_make_outcome("t1"), _make_outcome("t2")]
+    # Simulate corrupted/legacy data where domain is None
+    for o in outcomes:
+        object.__setattr__(o, "domain", None)
+
+    patterns = miner.mine(traces, outcomes)
+    assert patterns == []
+    llm.ask_json.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Counter tests
 # ---------------------------------------------------------------------------

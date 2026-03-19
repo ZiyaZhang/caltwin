@@ -41,6 +41,8 @@ class HardCaseMiner:
         # Find failures: outcomes where prediction was wrong
         failures = []
         for outcome in outcomes:
+            if outcome.domain is None:
+                continue  # standalone outcomes without domain can't be grouped
             if outcome.prediction_rank is not None and outcome.prediction_rank != 1:
                 trace = trace_map.get(outcome.trace_id)
                 if trace:
