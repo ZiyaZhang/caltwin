@@ -314,4 +314,6 @@ CLI: `twin-runtime mine-patterns [--min-failures N] [--lookback N]`
 - [ ] HardCaseMiner 通过 LLMPort.ask_json()
 - [ ] HardCaseMiner 独立分组
 - [ ] 文件计数器 + 每 20 次触发 mining
-- [ ] Tests + README + CHANGELOG
+- [ ] Offline + Online tests 通过
+- [ ] scripts/verify_flywheel.py: CF_2 > CF_0（flywheel effect verified）
+- [ ] README + CHANGELOG 更新

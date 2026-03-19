@@ -389,7 +389,11 @@ Commit: `feat(D1): OpenClaw skill — SKILL.md + heartbeat + install check`
 
 ---
 
-## Step 6: 集成测试（0.5 天）
+## Step 6: 集成测试 + Flywheel Effect 验证（1 天）
+
+分两部分：6a 管道连通性，6b 效果验证。
+
+### 6a. 管道连通性测试
 
 `tests/test_implicit/test_integration.py`:
 
@@ -414,7 +418,97 @@ def test_reflect_triggers_mining():
     # 6. assert reflect_count reset to 0
 ```
 
-Commit: `test(D): integration tests`
+### 6b. Flywheel Effect Test
+
+**新文件**: `scripts/verify_flywheel.py`
+
+不进 CI，手动运行，~60-80 次 LLM 调用（Sonnet ~$0.3-0.5）。
+
+**逻辑**: 同一批 10 个场景跑 3 轮，每轮之间 reflect outcomes，观察 CF 变化。
+
+```
+Round 0: bootstrap → run 10 scenarios → CF_0
+Round 1: reflect 10 outcomes → run 同样 10 scenarios → CF_1
+Round 2: reflect 10 outcomes → run 同样 10 scenarios → CF_2
+```
+
+10 个场景都有预设 ground truth（模拟用户真实偏好），脚本自动比对。
+
+```python
+# scripts/verify_flywheel.py
+"""
+Flywheel effect verification — manual run, not CI.
+~60-80 LLM calls (Sonnet ~$0.3-0.5).
+
+Usage: python scripts/verify_flywheel.py [--rounds 3] [--scenarios 10]
+"""
+
+SCENARIOS = [
+    {"query": "用 Redis 还是 Memcached 做缓存？", "options": ["Redis", "Memcached"], "ground_truth": "Redis"},
+    {"query": "新项目用 monorepo 还是 multirepo？", "options": ["monorepo", "multirepo"], "ground_truth": "monorepo"},
+    {"query": "团队沟通用异步文档还是同步会议？", "options": ["异步文档", "同步会议"], "ground_truth": "异步文档"},
+    {"query": "技术债要不要现在还？", "options": ["现在还", "先做需求"], "ground_truth": "现在还"},
+    {"query": "新人 onboarding 让他直接上手还是先培训？", "options": ["直接上手", "先培训"], "ground_truth": "直接上手"},
+    {"query": "要不要引入新框架替换现有的？", "options": ["引入新框架", "继续用现有的"], "ground_truth": "继续用现有的"},
+    {"query": "CI 失败要不要 block merge？", "options": ["严格 block", "允许 override"], "ground_truth": "严格 block"},
+    {"query": "API 版本策略用 URL path 还是 header？", "options": ["URL path", "header"], "ground_truth": "URL path"},
+    {"query": "数据库选 PostgreSQL 还是 MySQL？", "options": ["PostgreSQL", "MySQL"], "ground_truth": "PostgreSQL"},
+    {"query": "部署策略用蓝绿还是滚动？", "options": ["蓝绿部署", "滚动部署"], "ground_truth": "蓝绿部署"},
+]
+
+def run_round(twin, scenarios, round_idx):
+    """Run all scenarios, return CF score."""
+    correct = 0
+    for s in scenarios:
+        trace = orchestrator_run(query=s["query"], option_set=s["options"], twin=twin)
+        # Check if top prediction matches ground truth
+        ranking = _extract_ranking(trace)
+        if ranking and ranking[0].lower().strip() == s["ground_truth"].lower().strip():
+            correct += 1
+    cf = correct / len(scenarios)
+    print(f"  Round {round_idx}: CF = {cf:.0%} ({correct}/{len(scenarios)})")
+    return cf
+
+def reflect_round(twin, scenarios, trace_store, cal_store, exp_store, llm):
+    """Reflect all outcomes from previous round."""
+    for s in scenarios:
+        # reflect with ground truth
+        ...
+
+def main():
+    # Bootstrap → Round 0 → Reflect → Round 1 → Reflect → Round 2
+    cf_scores = []
+    for round_idx in range(n_rounds):
+        cf = run_round(twin, scenarios, round_idx)
+        cf_scores.append(cf)
+        if round_idx < n_rounds - 1:
+            reflect_round(...)
+
+    # Verdict
+    cf_0, cf_last = cf_scores[0], cf_scores[-1]
+    if cf_last > cf_0:
+        print(f"\n✓ PASS: Flywheel is turning. CF improved {cf_0:.0%} → {cf_last:.0%}")
+    elif cf_last == cf_0:
+        print(f"\n⚠ WARN: CF stagnant at {cf_0:.0%}. Check search/retrieval.")
+    else:
+        print(f"\n✗ FAIL: CF regressed {cf_0:.0%} → {cf_last:.0%}. Check ExperienceUpdater.")
+```
+
+**验收标准**:
+
+| 指标 | Pass | Warn | Fail |
+|------|------|------|------|
+| CF_2 > CF_0 | 飞轮在转 | — | — |
+| CF_2 == CF_0 | — | 停滞 | — |
+| CF_2 < CF_0 | — | — | 反转 |
+
+**诊断指南**（如果不 pass）:
+- CF_0 就 >0.8 → 换更难场景集
+- CF_1 == CF_0 → 检查 ExperienceLibrary.search 是否返回相关经验
+- CF_2 < CF_1 → 检查 ExperienceUpdater 冲突检测
+- 全程 <0.3 → bootstrap 答案与 ground truth 偏好不匹配
+
+Commit: `test(D): integration tests + flywheel effect verification script`
 
 ---
 
@@ -437,6 +531,7 @@ ruff check src/ tests/
 twin-runtime heartbeat
 twin-runtime confirm --list
 twin-runtime mine-patterns --lookback 10
+python scripts/verify_flywheel.py  # manual, ~$0.3-0.5 LLM cost
 ```
 
 Commit: `docs: D phase — README + CHANGELOG`
@@ -446,16 +541,16 @@ Commit: `docs: D phase — README + CHANGELOG`
 ## 执行顺序
 
 ```
-Step 0: 前置改动 (5 项)          ── 1 天
-Step 1: ExperienceUpdater (D3)   ── 1 天
-Step 2: HeartbeatReflector (D2)  ── 2 天
-Step 3: CLI heartbeat+confirm    ── 1 天
-Step 4: HardCaseMiner (D4)       ── 1.5 天
-Step 5: OpenClaw Skill (D1)      ── 0.5 天
-Step 6: 集成测试                 ── 0.5 天
-Step 7: 文档 + 验收              ── 0.5 天
-                                 ──────────
-                                  合计 8 天
+Step 0: 前置改动 (5 项)                     ── 1 天
+Step 1: ExperienceUpdater (D3)              ── 1 天
+Step 2: HeartbeatReflector (D2)             ── 2 天
+Step 3: CLI heartbeat+confirm               ── 1 天
+Step 4: HardCaseMiner (D4)                  ── 1.5 天
+Step 5: OpenClaw Skill (D1)                 ── 0.5 天
+Step 6: 集成测试 + Flywheel Effect 验证     ── 1 天
+Step 7: 文档 + 验收                         ── 0.5 天
+                                            ──────────
+                                             合计 8.5 天
 ```
 
 D3 在 D2 前面：HeartbeatReflector._auto_reflect 依赖 ExperienceUpdater。
