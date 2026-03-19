@@ -167,9 +167,9 @@ class TestConsistencyChecker:
             confidence_penalty=0.5,
         )
         checker = ConsistencyChecker(llm=llm)
-        trace = _make_trace(query="salary negotiation")
+        trace = _make_trace(query="salary negotiation", final_decision="Ask for 120k raise")
         entry = _make_entry(
-            insight="Don't negotiate aggressively",
+            insight="should not ask for 120k in this market",
             weight=1.0,
         )
         lib = ExperienceLibrary(entries=[entry])
@@ -186,9 +186,9 @@ class TestConsistencyChecker:
             confidence_penalty=0.1,
         )
         checker = ConsistencyChecker(llm=llm)
-        trace = _make_trace(query="salary negotiation", uncertainty=0.3)
+        trace = _make_trace(query="salary negotiation", final_decision="Ask for 120k", uncertainty=0.3)
         entry = _make_entry(
-            insight="Avoid high anchors",
+            insight="avoid asking for 120k in a down market",
             weight=1.0,
         )
         lib = ExperienceLibrary(entries=[entry])

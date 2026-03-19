@@ -53,7 +53,8 @@ class ReflectionGenerator:
         self, trace: RuntimeDecisionTrace, exp_lib: ExperienceLibrary
     ) -> ReflectionResult:
         """CF-hit: search entries, confirm best match. 0 LLM calls."""
-        keywords = trace.query.lower().split()[:10]
+        from twin_runtime.application.planner.memory_access_planner import _extract_keywords
+        keywords = _extract_keywords(trace.query)
         matches = exp_lib.search_entries(keywords, top_k=1)
 
         if matches:

@@ -104,10 +104,15 @@ Output JSON:
 class BootstrapEngine:
     """Convert bootstrap answers into an initial TwinState + ExperienceLibrary."""
 
-    def __init__(self, llm: LLMPort) -> None:
+    def __init__(
+        self,
+        llm: LLMPort,
+        questions: Optional[List[BootstrapQuestion]] = None,
+    ) -> None:
         self._llm = llm
+        source = questions if questions is not None else DEFAULT_QUESTIONS
         self._question_map: Dict[str, BootstrapQuestion] = {
-            q.id: q for q in DEFAULT_QUESTIONS
+            q.id: q for q in source
         }
 
     # -- public API ---------------------------------------------------------

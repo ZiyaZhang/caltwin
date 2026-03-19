@@ -711,7 +711,7 @@ def cmd_bootstrap(args):
     # Run engine
     print("\nProcessing your answers...")
     llm = DefaultLLM()
-    engine = BootstrapEngine(llm=llm)
+    engine = BootstrapEngine(llm=llm, questions=questions)
     result = engine.run(answers, user_id=user_id)
 
     # Save
@@ -740,16 +740,44 @@ def cmd_bootstrap(args):
 
 
 def _run_bootstrap_comparison(twin, args):
-    """Run mini A/B comparison after bootstrap."""
-    try:
-        from twin_runtime.application.calibration.fidelity_evaluator import evaluate_single_case
-        from twin_runtime.domain.models.calibration import CalibrationCase
-    except ImportError:
-        return
+    """Run mini A/B comparison after bootstrap using the orchestrator."""
+    from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
+    from twin_runtime.interfaces.defaults import DefaultLLM
 
     n = getattr(args, "comparison_scenarios", 5)
-    print(f"\n  Running mini A/B with {n} scenarios... (requires LLM calls)")
-    print("  (Use --no-comparison to skip this step)")
+    print(f"\n  Running mini A/B with {n} scenarios...")
+    print("  (Use --no-comparison to skip this step)\n")
+
+    # Simple comparison scenarios — test the twin can answer basic decisions
+    scenarios = [
+        ("Should I negotiate my salary at the new job offer?", ["Negotiate aggressively", "Accept as-is"]),
+        ("A colleague's project approach seems wrong. What should I do?", ["Speak up directly", "Let it play out"]),
+        ("I have savings to invest. Conservative or aggressive?", ["Conservative index funds", "High-growth stocks"]),
+        ("Should I take the remote job or stay at the office role?",  ["Take remote job", "Stay at office"]),
+        ("A friend asks for a large loan. What do I do?", ["Lend the money", "Politely decline"]),
+        ("Should I publish my controversial take on social media?", ["Post it", "Keep it private"]),
+        ("Should I switch careers to follow my passion?", ["Switch now", "Stay and plan gradually"]),
+    ][:n]
+
+    llm = DefaultLLM()
+    results = []
+    for query, options in scenarios:
+        try:
+            trace = orchestrator_run(query=query, option_set=options, twin=twin, llm=llm)
+            mode = trace.decision_mode.value
+            unc = trace.uncertainty
+            decision = trace.final_decision[:60]
+            results.append((query[:40], decision, mode, unc))
+            print(f"  [{mode:8s} u={unc:.2f}] {query[:45]}")
+            print(f"    → {decision}")
+        except Exception as e:
+            results.append((query[:40], f"ERROR: {e}", "error", 1.0))
+            print(f"  [ERROR] {query[:45]}: {e}")
+
+    # Summary
+    direct = sum(1 for _, _, m, _ in results if m == "direct")
+    avg_unc = sum(u for _, _, _, u in results) / len(results) if results else 1.0
+    print(f"\n  Summary: {direct}/{len(results)} direct answers, avg uncertainty {avg_unc:.2f}")
 
 
 def cmd_mcp_serve(args):

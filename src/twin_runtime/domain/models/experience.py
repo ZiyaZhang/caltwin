@@ -106,10 +106,24 @@ class ExperienceLibrary(BaseModel):
         top_k: int = 5,
         min_weight: float = 0.1,
     ) -> List[ExperienceEntry]:
-        """Convenience — search and return only ExperienceEntry objects."""
-        hits = self.search(query_keywords, top_k=top_k * 2, min_weight=min_weight)
-        entries = [r.entry for r in hits if r.kind == "entry" and r.entry is not None]
-        return entries[:top_k]
+        """Search entries only, ignoring patterns entirely.
+
+        Scores entries directly rather than filtering search() results,
+        so patterns cannot starve entries from the top_k slots.
+        """
+        query_set = {kw.lower() for kw in query_keywords}
+        scored: List[tuple] = []
+        for entry in self.entries:
+            if entry.weight < min_weight:
+                continue
+            entry_tags = {t.lower() for t in entry.scenario_type}
+            overlap = len(query_set & entry_tags)
+            if overlap == 0:
+                continue
+            score = overlap * entry.weight * (1 + 0.1 * entry.confirmation_count)
+            scored.append((score, entry))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [e for _, e in scored[:top_k]]
 
     def add(self, entry: ExperienceEntry) -> None:
         """Append an entry to the library."""

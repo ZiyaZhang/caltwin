@@ -27,7 +27,8 @@ class ConsistencyChecker:
         exp_lib: ExperienceLibrary,
     ) -> ConsistencyResult:
         # 1. Extract keywords from query
-        keywords = trace.query.lower().split()[:10]
+        from twin_runtime.application.planner.memory_access_planner import _extract_keywords
+        keywords = _extract_keywords(trace.query)
 
         # 2. Search for relevant entries
         matches = exp_lib.search_entries(keywords, top_k=3)
@@ -52,11 +53,39 @@ class ConsistencyChecker:
         return self._llm_check(trace, matches, conflicting)
 
     def _deterministic_contradiction(self, decision: str, insight: str) -> bool:
-        """Simple check: insight contains negation patterns about the recommended option."""
-        negation_patterns = ["avoid", "\u4e0d\u8981", "\u4e0d\u63a8\u8350", "should not", "shouldn't", "don't"]
-        for pattern in negation_patterns:
-            if pattern in insight:
-                return True
+        """Check if insight contains a negation that refers to a term also in the decision.
+
+        Only flags a contradiction when the negated content overlaps with the
+        recommended option, avoiding false positives from generic negation words.
+        """
+        negation_patterns = [
+            ("avoid", "avoid "), ("should not", "should not "),
+            ("shouldn't", "shouldn't "), ("don't", "don't "),
+            ("不要", "不要"), ("不推荐", "不推荐"),
+        ]
+        # Extract significant words from decision (3+ chars or CJK)
+        decision_terms = set()
+        for word in decision.split():
+            w = word.strip(".,;:!?\"'()[]").lower()
+            if len(w) >= 3:
+                decision_terms.add(w)
+        # Add CJK bigrams from decision
+        cjk = [c for c in decision if '\u4e00' <= c <= '\u9fff']
+        for i in range(len(cjk) - 1):
+            decision_terms.add(cjk[i] + cjk[i + 1])
+
+        if not decision_terms:
+            return False
+
+        for _, prefix in negation_patterns:
+            idx = insight.find(prefix)
+            if idx == -1:
+                continue
+            # Check if the text after the negation mentions something from the decision
+            negated_context = insight[idx:idx + len(prefix) + 50].lower()
+            for term in decision_terms:
+                if term in negated_context:
+                    return True
         return False
 
     def _llm_check(
