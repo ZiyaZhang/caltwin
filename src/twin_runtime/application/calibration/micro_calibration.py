@@ -118,7 +118,14 @@ def apply_update(update: MicroCalibrationUpdate, twin: TwinState) -> TwinState:
 
     Each delta is safety-capped per path pattern and then clamped to [0, 1].
     Sets update.applied=True and update.applied_at=now after applying.
+    Raises ValueError if the update was already applied (idempotency guard).
     """
+    if update.applied:
+        raise ValueError(
+            f"MicroCalibrationUpdate {update.update_id} has already been applied "
+            f"at {update.applied_at}. Cannot re-apply."
+        )
+
     new_twin = deepcopy(twin)
 
     for param_path, raw_delta in update.parameter_deltas.items():
@@ -159,6 +166,11 @@ def _apply_delta_to_model(obj, parts: list[str], delta: float) -> None:
 
     child = getattr(obj, attr, None)
     if child is None:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Cannot resolve attribute '%s' on %s — delta silently dropped",
+            attr, type(obj).__name__,
+        )
         return
 
     if rest:
@@ -169,9 +181,9 @@ def _apply_delta_to_model(obj, parts: list[str], delta: float) -> None:
         if isinstance(current, (int, float)):
             new_val = round(float(current) + delta, 10)
             new_val = max(0.0, min(1.0, new_val))
-            # Use model_copy for Pydantic v2, or __dict__ fallback
+            # Use setattr which triggers Pydantic v2 validators if validate_assignment=True
             try:
-                updated = obj.model_copy(update={attr: new_val})
-                obj.__dict__.update(updated.__dict__)
-            except Exception:
-                obj.__dict__[attr] = new_val
+                setattr(obj, attr, new_val)
+            except (AttributeError, ValueError):
+                # Fallback for frozen or non-validating models
+                object.__setattr__(obj, attr, new_val)

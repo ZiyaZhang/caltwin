@@ -48,7 +48,10 @@ def _keyword_scores_from_twin(query: str, domain_heads: list) -> Dict[DomainEnum
         keywords = head.keywords or _LEGACY_KEYWORDS.get(head.domain, [])
         if not keywords:
             continue
-        hits[head.domain] = sum(1 for kw in keywords if kw in q)
+        hits[head.domain] = sum(
+            1 for kw in keywords
+            if (re.search(r'\b' + re.escape(kw) + r'\b', q) if kw.isascii() else kw in q)
+        )
     total = sum(hits.values())
     if total == 0:
         return {}
@@ -110,10 +113,7 @@ def _llm_interpret(query: str, valid_domains: List[str], llm: LLMPort) -> dict:
 
 # --- Stage 3: Constrained routing policy ---
 
-_DOMINANCE_GAP = 0.5
-_MULTI_DOMAIN_GAP = 0.15
 _AMBIGUITY_THRESHOLD = 0.7
-_CONFIDENCE_THRESHOLD = 0.4
 
 
 def _apply_routing_policy(
@@ -158,7 +158,7 @@ def _apply_routing_policy(
 
 def interpret_situation(query: str, twin: TwinState, *, llm: LLMPort) -> Tuple[SituationFrame, ScopeGuardResult]:
     """Run the three-stage Situation Interpreter pipeline."""
-    all_domains = [d.value for d in DomainEnum]
+    all_domains = [d.value for d in twin.valid_domains()] if hasattr(twin, 'valid_domains') else [d.value for d in DomainEnum]
 
     # Stage 0: Deterministic scope guard (pre-LLM)
     guard_result = deterministic_scope_guard(query, twin.scope_declaration)

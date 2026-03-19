@@ -11,6 +11,8 @@ def time_decay_weight(age_days: float, half_life: float, floor: float) -> float:
 
     weight = floor + (1 - floor) * exp(-ln(2) * age_days / half_life)
     """
+    if half_life <= 0:
+        raise ValueError(f"half_life must be positive, got {half_life}")
     if age_days <= 0:
         return 1.0
     decay = math.exp(-math.log(2) * age_days / half_life)

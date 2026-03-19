@@ -73,15 +73,14 @@ def apply_evaluation(
     updated.shared_decision_core.last_recalibrated_at = now
 
     # 4. Bump state version
+    import re as _re
     current_version = updated.state_version
-    if current_version.startswith("v"):
-        try:
-            num = int(current_version[1:])
-            updated.state_version = f"v{num + 1:03d}"
-        except ValueError:
-            updated.state_version = current_version + ".1"
+    m = _re.match(r"^v(\d+)", current_version)
+    if m:
+        num = int(m.group(1))
+        updated.state_version = f"v{num + 1:03d}"
     else:
-        updated.state_version = current_version + ".1"
+        updated.state_version = "v001"
 
     # 5. Update temporal metadata
     updated.temporal_metadata.state_valid_from = now

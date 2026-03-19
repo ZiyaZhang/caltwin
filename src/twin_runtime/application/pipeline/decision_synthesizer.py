@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, MergeStrategy
+from twin_runtime.domain.models.primitives import DecisionMode, DomainEnum, MergeStrategy, ScopeStatus
 from twin_runtime.domain.models.runtime import ConflictReport, HeadAssessment, RuntimeDecisionTrace
 from twin_runtime.domain.models.situation import SituationFrame
 from twin_runtime.domain.models.twin_state import TwinState
@@ -62,7 +62,7 @@ def _synthesize_decision(
     Returns (decision_text, mode, uncertainty, refusal_reason).
     """
     # Refused: out of scope
-    if frame.scope_status.value == "out_of_scope":
+    if frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
         return (
             "This query is outside the twin's modeled capabilities.",
             DecisionMode.REFUSED,
@@ -71,7 +71,7 @@ def _synthesize_decision(
         )
 
     # Degraded: borderline scope or very low confidence
-    if frame.scope_status.value == "borderline":
+    if frame.scope_status == ScopeStatus.BORDERLINE:
         mode = DecisionMode.DEGRADED
     elif conflict and conflict.final_merge_strategy == MergeStrategy.CLARIFY:
         mode = DecisionMode.CLARIFIED
@@ -110,7 +110,7 @@ def _synthesize_decision(
 
 def merge_structured_decision(assessments, conflict, frame, *, option_set=None):
     """Structured decision without surface realization. For deliberation loop convergence checks."""
-    if frame.scope_status.value == "out_of_scope":
+    if frame.scope_status == ScopeStatus.OUT_OF_SCOPE:
         return StructuredDecision(
             top_choice=None, option_scores={}, avg_confidence=0.0,
             mode=DecisionMode.REFUSED, refusal_reason="out_of_scope",
@@ -129,11 +129,11 @@ def merge_structured_decision(assessments, conflict, frame, *, option_set=None):
     avg_confidence = sum(a.confidence for a in assessments) / len(assessments) if assessments else 0.0
 
     mode = DecisionMode.DIRECT
-    if frame.scope_status.value == "borderline":
+    if frame.scope_status == ScopeStatus.BORDERLINE:
         mode = DecisionMode.DEGRADED
     elif all_phantom:
         mode = DecisionMode.DEGRADED
-    elif conflict and conflict.final_merge_strategy.value == "clarify":
+    elif conflict and conflict.final_merge_strategy == MergeStrategy.CLARIFY:
         mode = DecisionMode.CLARIFIED
 
     return StructuredDecision(
@@ -165,8 +165,9 @@ def _surface_realize(
             key=lambda x: -x[1],
         )[:3]
         utility_str = ", ".join(f"{k}={v:.1f}" for k, v in top3_utility)
+        top_option = a.option_ranking[0] if a.option_ranking else "none"
         assessment_summary.append(
-            f"  [{a.domain.value}] top={a.option_ranking[0]}, conf={a.confidence:.2f}, drivers: {utility_str}"
+            f"  [{a.domain.value}] top={top_option}, conf={a.confidence:.2f}, drivers: {utility_str}"
         )
 
     conflict_note = ""

@@ -45,6 +45,8 @@ def _dominant_residual(miss_details: List[EvaluationCaseDetail]) -> Tuple[str, i
 
     Counts exact-string occurrences across the miss cases.
     """
+    if not miss_details:
+        return "", 0
     counts: Dict[str, int] = defaultdict(int)
     for d in miss_details:
         counts[d.residual_direction] += 1

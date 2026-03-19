@@ -67,9 +67,10 @@ def get_google_credentials(
         flow = InstalledAppFlow.from_client_secrets_file(str(creds_file), scopes)
         creds = flow.run_local_server(port=0)
 
-    # Cache token
+    # Cache token with restricted permissions
     tok_file.parent.mkdir(parents=True, exist_ok=True)
     tok_file.write_text(creds.to_json())
+    os.chmod(str(tok_file), 0o600)
 
     return creds
 

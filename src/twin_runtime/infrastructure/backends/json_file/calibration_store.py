@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
+
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_safe_id(value: str, label: str = "ID") -> str:
+    if not value or not _SAFE_ID_RE.match(value):
+        raise ValueError(f"Unsafe {label} for filesystem use: {value!r}")
+    return value
 
 from twin_runtime.domain.models.calibration import (
     CalibrationCase, CandidateCalibrationCase, TwinEvaluation,
@@ -20,6 +29,7 @@ class CalibrationStore:
     """File-based storage for calibration data."""
 
     def __init__(self, base_dir: str, user_id: str):
+        _validate_safe_id(user_id, "user_id")
         self.base = Path(base_dir) / user_id / "calibration"
         self.base.mkdir(parents=True, exist_ok=True)
         (self.base / "candidates").mkdir(exist_ok=True)
@@ -39,12 +49,12 @@ class CalibrationStore:
 
     def load_candidate(self, candidate_id: str) -> CandidateCalibrationCase:
         path = self.base / "candidates" / f"{candidate_id}.json"
-        return CandidateCalibrationCase(**json.loads(path.read_text()))
+        return CandidateCalibrationCase.model_validate_json(path.read_text())
 
     def list_candidates(self, promoted: Optional[bool] = None) -> List[CandidateCalibrationCase]:
         candidates = []
         for f in sorted((self.base / "candidates").glob("*.json")):
-            c = CandidateCalibrationCase(**json.loads(f.read_text()))
+            c = CandidateCalibrationCase.model_validate_json(f.read_text())
             if promoted is None or c.promoted_to_calibration_case == promoted:
                 candidates.append(c)
         return candidates
@@ -58,12 +68,12 @@ class CalibrationStore:
 
     def load_case(self, case_id: str) -> CalibrationCase:
         path = self.base / "cases" / f"{case_id}.json"
-        return CalibrationCase(**json.loads(path.read_text()))
+        return CalibrationCase.model_validate_json(path.read_text())
 
     def list_cases(self, used: Optional[bool] = None) -> List[CalibrationCase]:
         cases = []
         for f in sorted((self.base / "cases").glob("*.json")):
-            c = CalibrationCase(**json.loads(f.read_text()))
+            c = CalibrationCase.model_validate_json(f.read_text())
             if used is None or c.used_for_calibration == used:
                 cases.append(c)
         return cases
@@ -78,7 +88,7 @@ class CalibrationStore:
     def list_evaluations(self) -> List[TwinEvaluation]:
         evals = []
         for f in sorted((self.base / "evaluations").glob("*.json")):
-            evals.append(TwinEvaluation(**json.loads(f.read_text())))
+            evals.append(TwinEvaluation.model_validate_json(f.read_text()))
         evals.sort(key=lambda e: e.evaluated_at)
         return evals
 
@@ -92,7 +102,7 @@ class CalibrationStore:
     def list_events(self, since: Optional[datetime] = None) -> List[RuntimeEvent]:
         events = []
         for f in sorted((self.base / "events").glob("*.json")):
-            ev = RuntimeEvent(**json.loads(f.read_text()))
+            ev = RuntimeEvent.model_validate_json(f.read_text())
             if since is not None and ev.observed_at < since:
                 continue
             events.append(ev)
@@ -108,7 +118,7 @@ class CalibrationStore:
     def list_outcomes(self, trace_id: Optional[str] = None) -> List[OutcomeRecord]:
         outcomes = []
         for f in sorted((self.base / "outcomes").glob("*.json")):
-            o = OutcomeRecord(**json.loads(f.read_text()))
+            o = OutcomeRecord.model_validate_json(f.read_text())
             if trace_id is not None and o.trace_id != trace_id:
                 continue
             outcomes.append(o)
@@ -124,7 +134,7 @@ class CalibrationStore:
     def list_detected_biases(self, status: Optional[DetectedBiasStatus] = None) -> List[DetectedBias]:
         biases = []
         for f in sorted((self.base / "detected_biases").glob("*.json")):
-            b = DetectedBias(**json.loads(f.read_text()))
+            b = DetectedBias.model_validate_json(f.read_text())
             if status is not None and b.status != status:
                 continue
             biases.append(b)
@@ -140,6 +150,6 @@ class CalibrationStore:
     def list_fidelity_scores(self, limit: int = 10) -> List[TwinFidelityScore]:
         scores = []
         for f in sorted((self.base / "fidelity_scores").glob("*.json")):
-            scores.append(TwinFidelityScore(**json.loads(f.read_text())))
+            scores.append(TwinFidelityScore.model_validate_json(f.read_text()))
         scores.sort(key=lambda s: s.computed_at, reverse=True)
         return scores[:limit]

@@ -117,6 +117,10 @@ def _load_twin(twin_store, user_id):
 # Tool handlers
 # ---------------------------------------------------------------------------
 
+_MAX_QUERY_LENGTH = 10000
+_MAX_OPTIONS_COUNT = 20
+
+
 async def _handle_decide(args: Dict[str, Any]) -> str:
     """Run the twin pipeline on a decision and persist the trace."""
     query = args.get("query", "")
@@ -124,6 +128,11 @@ async def _handle_decide(args: Dict[str, Any]) -> str:
 
     if not query or not options:
         return json.dumps({"error": "'query' and 'options' are required."})
+
+    if len(query) > _MAX_QUERY_LENGTH:
+        return json.dumps({"error": f"Query too long (max {_MAX_QUERY_LENGTH} chars)."})
+    if len(options) > _MAX_OPTIONS_COUNT:
+        return json.dumps({"error": f"Too many options (max {_MAX_OPTIONS_COUNT})."})
 
     try:
         from twin_runtime.application.orchestrator.runtime_orchestrator import run as orchestrator_run
@@ -424,12 +433,15 @@ class _StdioMCPServer:
         await asyncio.get_event_loop().connect_read_pipe(lambda: protocol, sys.stdin.buffer)
 
         # We accumulate bytes and split on newlines (ndjson transport).
+        _MAX_BUF = 10 * 1024 * 1024  # 10MB safety limit
         buf = b""
         while True:
             chunk = await reader.read(65536)
             if not chunk:
                 break
             buf += chunk
+            if len(buf) > _MAX_BUF:
+                break
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 line = line.strip()

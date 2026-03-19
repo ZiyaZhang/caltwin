@@ -19,6 +19,11 @@ def confidence_field(description: str = "", **kw):
     return Field(ge=0.0, le=1.0, description=description, **kw)
 
 
+def uncertainty_field(description: str = "", **kw):
+    """Field for uncertainty values: 0.0 = certain, 1.0 = maximally uncertain."""
+    return Field(ge=0.0, le=1.0, description=description, **kw)
+
+
 def weight_field(description: str = "", **kw):
     return Field(ge=0.0, le=1.0, description=description, **kw)
 

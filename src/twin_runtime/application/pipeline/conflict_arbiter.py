@@ -71,7 +71,7 @@ def _classify_conflict(
     elif ranking_divergences:
         return [ConflictType.BELIEF]
     else:
-        return [ConflictType.PREFERENCE]
+        return []  # No conflicts detected
 
 
 def arbitrate(assessments: List[HeadAssessment]) -> Optional[ConflictReport]:

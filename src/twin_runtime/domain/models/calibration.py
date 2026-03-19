@@ -41,6 +41,16 @@ class CandidateCalibrationCase(BaseModel):
     promoted_to_calibration_case: bool = False
     promotion_reason: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _validate_observed_choice_in_options(self):
+        if self.observed_choice and self.option_set:
+            normalized_options = {o.lower().strip() for o in self.option_set}
+            if self.observed_choice.lower().strip() not in normalized_options:
+                raise ValueError(
+                    f"observed_choice '{self.observed_choice}' not found in option_set {self.option_set}"
+                )
+        return self
+
 
 class CalibrationCase(BaseModel):
     case_id: str = Field(min_length=1)
@@ -69,6 +79,16 @@ class CalibrationCase(BaseModel):
         description="Reserved for future use.",
     )
     used_for_calibration: bool = False
+
+    @model_validator(mode="after")
+    def _validate_actual_choice_in_options(self):
+        if self.actual_choice and self.option_set:
+            normalized_options = {o.lower().strip() for o in self.option_set}
+            if self.actual_choice.lower().strip() not in normalized_options:
+                raise ValueError(
+                    f"actual_choice '{self.actual_choice}' not found in option_set {self.option_set}"
+                )
+        return self
 
 
 class EvaluationCaseDetail(BaseModel):

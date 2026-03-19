@@ -17,6 +17,8 @@ from twin_runtime.domain.models.twin_state import TwinState
 
 def _jsd(p: List[float], q: List[float]) -> float:
     """Jensen-Shannon Divergence between two distributions."""
+    if len(p) != len(q):
+        raise ValueError(f"Distribution length mismatch: {len(p)} vs {len(q)}")
     m = [(pi + qi) / 2 for pi, qi in zip(p, q)]
     def kl(a, b):
         return sum(ai * math.log(ai / bi) for ai, bi in zip(a, b) if ai > 0 and bi > 0)
@@ -76,7 +78,7 @@ def _detect_domain_drift(
             continue
 
         # Decay-weighted choice distributions
-        from twin_runtime.application.calibration.time_decay import calibration_decay_weight, case_age_days
+        from twin_runtime.application.calibration.time_decay import calibration_decay_weight
         r_weighted: Dict[str, float] = {}
         for c in recent:
             w = calibration_decay_weight(case_age_days(c, as_of))

@@ -14,6 +14,7 @@ from twin_runtime.domain.models.primitives import (
     MergeStrategy,
     RuntimeEventType,
     confidence_field,
+    uncertainty_field,
 )
 
 
@@ -55,7 +56,7 @@ class RuntimeDecisionTrace(BaseModel):
     conflict_report_id: Optional[str] = None
     final_decision: str
     decision_mode: DecisionMode
-    uncertainty: float = confidence_field()
+    uncertainty: float = uncertainty_field(description="0.0 = certain, 1.0 = maximally uncertain")
     refusal_or_degrade_reason: Optional[str] = None
     output_text: Optional[str] = None
     memory_access_plan: Optional[Any] = Field(
@@ -96,6 +97,16 @@ class RuntimeDecisionTrace(BaseModel):
     terminated_by: Optional[str] = Field(default=None, description="TerminationReason value")
     deliberation_round_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     shadow_scores: Optional[Dict[str, float]] = Field(default=None)
+    # ConsistencyChecker audit fields (Phase B)
+    consistency_check_passed: Optional[bool] = Field(
+        default=None, description="ConsistencyChecker result (S2 only, None if not run)"
+    )
+    consistency_note: Optional[str] = Field(
+        default=None, description="ConsistencyChecker explanation"
+    )
+    conflicting_experience_ids: Optional[List[str]] = Field(
+        default=None, description="Experience IDs that conflicted with decision"
+    )
 
 
 class RuntimeEvent(BaseModel):

@@ -1,12 +1,21 @@
 """JSON file implementation of EvidenceStore protocol."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from twin_runtime.domain.evidence.base import EvidenceFragment
 from twin_runtime.domain.evidence.clustering import EvidenceCluster
 from twin_runtime.domain.models.recall_query import RecallQuery
+
+_SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_safe_id(value: str, label: str = "ID") -> str:
+    if not value or not _SAFE_ID_RE.match(value):
+        raise ValueError(f"Unsafe {label} for filesystem use: {value!r}")
+    return value
 
 
 class JsonFileEvidenceStore:
@@ -19,6 +28,7 @@ class JsonFileEvidenceStore:
         (self.base / "clusters").mkdir(exist_ok=True)
 
     def store_fragment(self, fragment: EvidenceFragment) -> str:
+        _validate_safe_id(fragment.content_hash, "content_hash")
         existing = self.get_by_hash(fragment.content_hash)
         if existing is None:
             path = self.base / "fragments" / f"{fragment.content_hash}.json"
@@ -76,9 +86,11 @@ class JsonFileEvidenceStore:
                 text_lower = text.lower()
                 return sum(1 for kw in recall_query.topic_keywords if kw.lower() in text_lower)
 
-            fragments.sort(key=relevance_score, reverse=True)
-            # Return empty if no keywords match (honest retrieval)
-            fragments = [f for f in fragments if relevance_score(f) > 0]
+            # Compute scores once to avoid O(2nk)
+            scored = [(relevance_score(f), f) for f in fragments]
+            scored = [(s, f) for s, f in scored if s > 0]
+            scored.sort(key=lambda x: x[0], reverse=True)
+            fragments = [f for _, f in scored]
         else:
             # Default: sort by recency (EvidenceFragment uses occurred_at)
             fragments.sort(key=lambda f: f.occurred_at, reverse=True)

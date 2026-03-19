@@ -27,11 +27,25 @@ from twin_runtime.domain.models.runtime import ConflictReport, HeadAssessment
 
 
 class TestCheckTermination:
-    def test_conflict_resolved_when_none(self):
+    def test_conflict_resolved_requires_2_rounds(self):
+        """CONFLICT_RESOLVED should NOT fire after only round 0 (initial pass)."""
         summaries = [
             DeliberationRoundSummary(
                 round_index=0, new_unique_evidence_count=5, avg_head_confidence=0.8
             )
+        ]
+        result = check_termination(summaries, None, None)
+        assert result is None  # S2 should deliberate at least once
+
+    def test_conflict_resolved_after_2_rounds(self):
+        """CONFLICT_RESOLVED fires after initial pass + 1 deliberation round."""
+        summaries = [
+            DeliberationRoundSummary(
+                round_index=0, new_unique_evidence_count=5, avg_head_confidence=0.8
+            ),
+            DeliberationRoundSummary(
+                round_index=1, new_unique_evidence_count=2, avg_head_confidence=0.85
+            ),
         ]
         result = check_termination(summaries, None, None)
         assert result == TerminationReason.CONFLICT_RESOLVED
@@ -113,11 +127,14 @@ class TestCheckTermination:
         assert result is None
 
     def test_conflict_resolved_single_resolvable(self):
-        """Single conflict type + resolvable_by_system -> CONFLICT_RESOLVED."""
+        """Single conflict type + resolvable_by_system -> CONFLICT_RESOLVED (requires 2 rounds)."""
         summaries = [
             DeliberationRoundSummary(
                 round_index=0, new_unique_evidence_count=2, avg_head_confidence=0.7
-            )
+            ),
+            DeliberationRoundSummary(
+                round_index=1, new_unique_evidence_count=1, avg_head_confidence=0.75
+            ),
         ]
         conflict = MagicMock(spec=ConflictReport)
         conflict.conflict_types = [ConflictType.BELIEF]
@@ -229,7 +246,7 @@ class TestDeliberationLoop:
             llm=llm, evidence_store=None, max_iterations=2,
         )
 
-        # Single head -> no conflict -> CONFLICT_RESOLVED at round 1 check
+        # Single head -> no conflict -> CONFLICT_RESOLVED after 1 deliberation round
         assert trace.terminated_by == TerminationReason.CONFLICT_RESOLVED.value
-        assert trace.deliberation_rounds == 0  # Only initial pass
-        assert len(trace.deliberation_round_summaries) == 1
+        assert trace.deliberation_rounds == 1  # Initial pass + 1 deliberation round
+        assert len(trace.deliberation_round_summaries) == 2

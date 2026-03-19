@@ -165,10 +165,14 @@ class PersonaCompiler:
 {chr(10).join(evidence_lines)}"""
 
         if self._llm is not None:
-            return self._llm.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
-        # Fallback: keep module-level ask_json for backward compat + test patching
-        import twin_runtime.application.compiler.persona_compiler as _self_mod
-        return _self_mod.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+            result = self._llm.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+        else:
+            # Fallback: keep module-level ask_json for backward compat + test patching
+            import twin_runtime.application.compiler.persona_compiler as _self_mod
+            result = _self_mod.ask_json(_EXTRACT_SYSTEM, user_msg, max_tokens=1024)
+        if not isinstance(result, dict):
+            raise ValueError(f"LLM returned non-dict response: {type(result)}")
+        return result
 
     def compile(
         self,
@@ -235,20 +239,20 @@ class PersonaCompiler:
         if core_params.get("risk_tolerance") is not None:
             old = updated.shared_decision_core.risk_tolerance
             new = float(core_params["risk_tolerance"])
-            updated.shared_decision_core.risk_tolerance = round(old * (1 - alpha) + new * alpha, 3)
+            updated.shared_decision_core.risk_tolerance = max(0.0, min(1.0, round(old * (1 - alpha) + new * alpha, 3)))
             self.evidence_graph.add_edge("compiled", "shared_decision_core.risk_tolerance")
 
         if core_params.get("conflict_style") is not None:
             try:
                 updated.shared_decision_core.conflict_style = ConflictStyle(core_params["conflict_style"])
+                self.evidence_graph.add_edge("compiled", "shared_decision_core.conflict_style")
             except ValueError:
                 pass  # LLM returned unknown value, keep existing
-            self.evidence_graph.add_edge("compiled", "shared_decision_core.conflict_style")
 
         if core_params.get("ambiguity_tolerance") is not None:
             old = updated.shared_decision_core.ambiguity_tolerance
             new = float(core_params["ambiguity_tolerance"])
-            updated.shared_decision_core.ambiguity_tolerance = round(old * (1 - alpha) + new * alpha, 3)
+            updated.shared_decision_core.ambiguity_tolerance = max(0.0, min(1.0, round(old * (1 - alpha) + new * alpha, 3)))
 
         # Update causal beliefs
         causal = extracted.get("causal_beliefs", {})

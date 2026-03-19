@@ -37,12 +37,14 @@ def check_termination(
     if len(round_summaries) < 1:
         return None
 
-    # 1. CONFLICT_RESOLVED
-    if current_conflict is None:
-        return TerminationReason.CONFLICT_RESOLVED
-    if (len(current_conflict.conflict_types) == 1
-            and current_conflict.resolvable_by_system):
-        return TerminationReason.CONFLICT_RESOLVED
+    # 1. CONFLICT_RESOLVED — require at least 2 rounds (initial pass + 1 deliberation)
+    #    before allowing early termination, so S2 always deliberates at least once
+    if len(round_summaries) >= 2:
+        if current_conflict is None:
+            return TerminationReason.CONFLICT_RESOLVED
+        if (len(current_conflict.conflict_types) == 1
+                and current_conflict.resolvable_by_system):
+            return TerminationReason.CONFLICT_RESOLVED
 
     # Require at least 2 rounds for evidence/confidence checks
     if len(round_summaries) < 2:
@@ -74,6 +76,7 @@ def deliberation_loop(
     guard_result: Optional[ScopeGuardResult] = None,
     max_iterations: int = 2,
     micro_calibrate: bool = False,
+    experience_library=None,  # Optional[ExperienceLibrary] — forward compat
 ) -> RuntimeDecisionTrace:
     """Run bounded deliberation: initial pass + up to max_iterations rounds."""
     seen_hashes: Set[str] = set()
