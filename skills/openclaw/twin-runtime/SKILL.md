@@ -1,5 +1,5 @@
 ---
-name: caltwin
+name: twin-runtime
 description: >
   Calibrated judgment twin for work decisions. Provides personalized
   recommendations calibrated to the user's actual decision-making patterns.

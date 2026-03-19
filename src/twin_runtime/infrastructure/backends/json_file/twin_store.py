@@ -57,7 +57,7 @@ class TwinStore:
         atomic_write(path, data)
 
         current = self._current_path(twin.user_id)
-        shutil.copy2(path, current)
+        atomic_write(current, data)
         return version
 
     def load_state(self, user_id: str, version: Optional[str] = None) -> TwinState:
@@ -89,8 +89,7 @@ class TwinStore:
         """Set current to a previous version. Returns the loaded state."""
         twin = self.load_state(user_id, version)
         current = self._current_path(user_id)
-        src = self._version_path(user_id, version)
-        shutil.copy2(src, current)
+        atomic_write(current, twin.model_dump_json(indent=2))
         return twin
 
     # --- Deprecated aliases (remove in v0.2) ---

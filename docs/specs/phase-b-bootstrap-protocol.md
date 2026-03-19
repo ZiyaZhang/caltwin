@@ -28,7 +28,7 @@ E：DSPy/GEPA prompt 自动优化 + EvoAgentX workflow 进化 + SELAUR-lite 升�
 
 ### 可直接复用的 3 个模块
 
-| FLEX 文件 | CalTwin 对应模块 | 复用方式 | 复用度 |
+| FLEX 文件 | twin-runtime 对应模块 | 复用方式 | 复用度 |
 |-----------|-----------------|---------|-------|
 | `critic.py` | ReflectionGenerator (B3) | 抄 prompt 结构和输出 schema，改成 judgment domain | 60% |
 | `updater.py` | ExperienceUpdater (D) | 抄冲突检测和去重逻辑，去掉 math/chem 验证 | 50% |

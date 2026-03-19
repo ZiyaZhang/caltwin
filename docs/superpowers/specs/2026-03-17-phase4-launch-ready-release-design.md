@@ -362,8 +362,8 @@ google = ["google-api-python-client", "google-auth-oauthlib"]
 twin-runtime = "twin_runtime.interfaces.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ZiyaZhang/caltwin"
-Repository = "https://github.com/ZiyaZhang/caltwin"
+Homepage = "https://github.com/ZiyaZhang/twin-runtime"
+Repository = "https://github.com/ZiyaZhang/twin-runtime"
 
 [tool.setuptools.packages.find]
 where = ["src"]

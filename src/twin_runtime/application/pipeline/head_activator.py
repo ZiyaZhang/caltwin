@@ -141,7 +141,7 @@ Use these alongside the persona parameters to inform your assessment."""
     if bias_corrections:
         correction_lines = []
         for bc in bias_corrections:
-            instruction = bc.correction_payload.get("instruction", "")
+            instruction = bc.instruction
             if instruction:
                 correction_lines.append(f"- {_sanitize_evidence(instruction, max_length=300)}")
         if correction_lines:

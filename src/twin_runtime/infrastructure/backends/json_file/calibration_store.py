@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import re
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
@@ -47,15 +50,22 @@ class CalibrationStore:
         return candidate.candidate_id
 
     def load_candidate(self, candidate_id: str) -> CandidateCalibrationCase:
+        _validate_safe_id(candidate_id, "candidate_id")
         path = self.base / "candidates" / f"{candidate_id}.json"
         return CandidateCalibrationCase.model_validate_json(path.read_text())
 
-    def list_candidates(self, promoted: Optional[bool] = None) -> List[CandidateCalibrationCase]:
+    def list_candidates(self, promoted: Optional[bool] = None, *, limit: int = 500) -> List[CandidateCalibrationCase]:
         candidates = []
         for f in sorted((self.base / "candidates").glob("*.json")):
-            c = CandidateCalibrationCase.model_validate_json(f.read_text())
+            try:
+                c = CandidateCalibrationCase.model_validate_json(f.read_text())
+            except Exception:
+                logger.warning("Skipping corrupt candidate file: %s", f)
+                continue
             if promoted is None or c.promoted_to_calibration_case == promoted:
                 candidates.append(c)
+                if len(candidates) >= limit:
+                    break
         return candidates
 
     # --- Cases ---
@@ -66,15 +76,22 @@ class CalibrationStore:
         return case.case_id
 
     def load_case(self, case_id: str) -> CalibrationCase:
+        _validate_safe_id(case_id, "case_id")
         path = self.base / "cases" / f"{case_id}.json"
         return CalibrationCase.model_validate_json(path.read_text())
 
-    def list_cases(self, used: Optional[bool] = None) -> List[CalibrationCase]:
+    def list_cases(self, used: Optional[bool] = None, *, limit: int = 500) -> List[CalibrationCase]:
         cases = []
         for f in sorted((self.base / "cases").glob("*.json")):
-            c = CalibrationCase.model_validate_json(f.read_text())
+            try:
+                c = CalibrationCase.model_validate_json(f.read_text())
+            except Exception:
+                logger.warning("Skipping corrupt case file: %s", f)
+                continue
             if used is None or c.used_for_calibration == used:
                 cases.append(c)
+                if len(cases) >= limit:
+                    break
         return cases
 
     # --- Evaluations ---
@@ -84,12 +101,16 @@ class CalibrationStore:
         atomic_write(path, evaluation.model_dump_json(indent=2))
         return evaluation.evaluation_id
 
-    def list_evaluations(self) -> List[TwinEvaluation]:
+    def list_evaluations(self, *, limit: int = 200) -> List[TwinEvaluation]:
         evals = []
         for f in sorted((self.base / "evaluations").glob("*.json")):
-            evals.append(TwinEvaluation.model_validate_json(f.read_text()))
+            try:
+                evals.append(TwinEvaluation.model_validate_json(f.read_text()))
+            except Exception:
+                logger.warning("Skipping corrupt evaluation file: %s", f)
+                continue
         evals.sort(key=lambda e: e.evaluated_at)
-        return evals
+        return evals[:limit]
 
     # --- Events ---
 
@@ -98,13 +119,19 @@ class CalibrationStore:
         atomic_write(path, event.model_dump_json(indent=2))
         return event.event_id
 
-    def list_events(self, since: Optional[datetime] = None) -> List[RuntimeEvent]:
+    def list_events(self, since: Optional[datetime] = None, *, limit: int = 1000) -> List[RuntimeEvent]:
         events = []
         for f in sorted((self.base / "events").glob("*.json")):
-            ev = RuntimeEvent.model_validate_json(f.read_text())
+            try:
+                ev = RuntimeEvent.model_validate_json(f.read_text())
+            except Exception:
+                logger.warning("Skipping corrupt event file: %s", f)
+                continue
             if since is not None and ev.observed_at < since:
                 continue
             events.append(ev)
+            if len(events) >= limit:
+                break
         return events
 
     # --- Outcomes ---
@@ -114,13 +141,19 @@ class CalibrationStore:
         atomic_write(path, outcome.model_dump_json(indent=2))
         return outcome.outcome_id
 
-    def list_outcomes(self, trace_id: Optional[str] = None) -> List[OutcomeRecord]:
+    def list_outcomes(self, trace_id: Optional[str] = None, *, limit: int = 500) -> List[OutcomeRecord]:
         outcomes = []
         for f in sorted((self.base / "outcomes").glob("*.json")):
-            o = OutcomeRecord.model_validate_json(f.read_text())
+            try:
+                o = OutcomeRecord.model_validate_json(f.read_text())
+            except Exception:
+                logger.warning("Skipping corrupt outcome file: %s", f)
+                continue
             if trace_id is not None and o.trace_id != trace_id:
                 continue
             outcomes.append(o)
+            if len(outcomes) >= limit:
+                break
         return outcomes
 
     # --- Detected Biases ---
@@ -130,13 +163,19 @@ class CalibrationStore:
         atomic_write(path, bias.model_dump_json(indent=2))
         return bias.bias_id
 
-    def list_detected_biases(self, status: Optional[DetectedBiasStatus] = None) -> List[DetectedBias]:
+    def list_detected_biases(self, status: Optional[DetectedBiasStatus] = None, *, limit: int = 200) -> List[DetectedBias]:
         biases = []
         for f in sorted((self.base / "detected_biases").glob("*.json")):
-            b = DetectedBias.model_validate_json(f.read_text())
+            try:
+                b = DetectedBias.model_validate_json(f.read_text())
+            except Exception:
+                logger.warning("Skipping corrupt bias file: %s", f)
+                continue
             if status is not None and b.status != status:
                 continue
             biases.append(b)
+            if len(biases) >= limit:
+                break
         return biases
 
     # --- Fidelity Scores ---

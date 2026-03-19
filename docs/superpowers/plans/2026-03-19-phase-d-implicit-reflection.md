@@ -370,10 +370,10 @@ Commit: `feat(D4): HardCaseMiner — systematic failure pattern detection`
 ### 新文件
 
 ```
-skills/openclaw/caltwin/SKILL.md
-skills/openclaw/caltwin/scripts/heartbeat_reflect.py
-skills/openclaw/caltwin/scripts/install_check.sh
-skills/openclaw/caltwin/references/calibration.md
+skills/openclaw/twin-runtime/SKILL.md
+skills/openclaw/twin-runtime/scripts/heartbeat_reflect.py
+skills/openclaw/twin-runtime/scripts/install_check.sh
+skills/openclaw/twin-runtime/references/calibration.md
 ```
 
 Content per spec §2. install_check.sh verifies twin-runtime installed + initialized.
@@ -381,8 +381,8 @@ Content per spec §2. install_check.sh verifies twin-runtime installed + initial
 ### 验证
 
 ```bash
-python3 -c "import yaml; yaml.safe_load(open('skills/openclaw/caltwin/SKILL.md').read().split('---')[1])"
-bash skills/openclaw/caltwin/scripts/install_check.sh
+python3 -c "import yaml; yaml.safe_load(open('skills/openclaw/twin-runtime/SKILL.md').read().split('---')[1])"
+bash skills/openclaw/twin-runtime/scripts/install_check.sh
 ```
 
 Commit: `feat(D1): OpenClaw skill — SKILL.md + heartbeat + install check`

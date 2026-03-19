@@ -115,7 +115,7 @@ P7: search_entries() 已在 B 中完成，不需要再加。
 ### 2.1 目录结构
 
 ```
-skills/openclaw/caltwin/
+skills/openclaw/twin-runtime/
 ├── SKILL.md
 ├── scripts/
 │   ├── heartbeat_reflect.py
@@ -128,17 +128,17 @@ skills/openclaw/caltwin/
 
 ```yaml
 ---
-name: caltwin
+name: twin-runtime
 description: >
   Calibrated judgment twin for work decisions. Provides personalized
   recommendations calibrated to the user's actual decision-making patterns.
 license: Apache-2.0
 # NOTE: metadata must be single-line JSON — OpenClaw parser requirement (#10)
 metadata: {"openclaw":{"requires":{"bins":["twin-runtime"],"env":["ANTHROPIC_API_KEY"]},"install":[{"id":"pip","kind":"pip","package":"twin-runtime","bins":["twin-runtime"]}]}}
-homepage: https://github.com/ZiyaZhang/caltwin
+homepage: https://github.com/ZiyaZhang/twin-runtime
 ---
 
-# CalTwin — Calibrated judgment twin
+# twin-runtime — Calibrated judgment twin
 
 ## When to invoke
 - User faces a work decision with 2+ options and trade-offs

@@ -37,6 +37,8 @@ from twin_runtime.domain.models import (
     UncertaintyType,
     OptionStructure,
 )
+from twin_runtime.domain.models.twin_state import TransferCoefficient
+from twin_runtime.domain.models.experience import PatternInsight
 
 
 class TestTwinStateFromFixture:
@@ -139,6 +141,50 @@ class TestModelValidation:
                 scope_status="modeled",
                 last_updated_at=datetime.now(timezone.utc),
             )
+
+    def test_transfer_coefficient_self_referential_rejected(self):
+        with pytest.raises(ValidationError, match="self-referential"):
+            TransferCoefficient(
+                from_domain=DomainEnum.WORK,
+                to_domain=DomainEnum.WORK,
+                coefficient=0.5,
+                confidence=0.8,
+                supporting_case_count=5,
+                last_validated_at=datetime.now(timezone.utc),
+            )
+
+    def test_transfer_coefficient_different_domains_ok(self):
+        tc = TransferCoefficient(
+            from_domain=DomainEnum.WORK,
+            to_domain=DomainEnum.MONEY,
+            coefficient=0.6,
+            confidence=0.7,
+            supporting_case_count=3,
+            last_validated_at=datetime.now(timezone.utc),
+        )
+        assert tc.from_domain != tc.to_domain
+
+    def test_pattern_insight_weight_upper_bound(self):
+        with pytest.raises(ValidationError):
+            PatternInsight(
+                id="p-1",
+                pattern_description="test",
+                systematic_bias="test",
+                correction_strategy="test",
+                weight=11.0,  # exceeds le=10.0
+                created_at=datetime.now(timezone.utc),
+            )
+
+    def test_pattern_insight_weight_valid(self):
+        p = PatternInsight(
+            id="p-1",
+            pattern_description="test",
+            systematic_bias="test",
+            correction_strategy="test",
+            weight=10.0,
+            created_at=datetime.now(timezone.utc),
+        )
+        assert p.weight == 10.0
 
 
 class TestSituationFrame:

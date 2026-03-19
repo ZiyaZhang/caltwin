@@ -30,10 +30,23 @@
 - `extract_keywords()` — promoted to `domain/utils/text.py` shared utility (3 consumers migrated)
 - `ExperienceLibrary.add_pattern()` — supports PatternInsight insertion
 
+### Code Quality & Bug Fixes
+
+- **TransferCoefficient**: added `@model_validator` rejecting self-referential transfers (from_domain == to_domain)
+- **PatternInsight.weight**: added upper bound `le=10.0` to prevent numerical overflow
+- **BiasCorrectionEntry.instruction**: added typed property accessor, eliminating implicit dict contract in head_activator
+- **TwinStore**: `current.json` now uses `atomic_write()` instead of `shutil.copy2()` for crash safety
+- **TwinStore.rollback**: also switched to `atomic_write()` for consistency
+- **CalibrationStore**: all `list_*()` methods now have `limit` parameter + corrupt file error handling
+- **ExperienceLibraryStore.load**: graceful fallback on corrupt JSON (returns empty library)
+- **MicroCalibration.apply_update**: returns immutable `UpdateResult` instead of mutating `update` in-place (safe retries)
+- **SourceRegistry**: replaced `print()` with `logging.warning()` for production readiness
+- **CalibrationStore**: added `_validate_safe_id()` to `load_candidate()` and `load_case()` for path traversal protection
+
 ### Project
 
-- Renamed repository URLs from `caltwin` to `twin-runtime`
-- 620+ tests (50 new for Phase D), ruff clean
+- Renamed all references from `caltwin` to `twin-runtime` (skill directory, docs, URLs)
+- 624+ tests (54 new for Phase D + code quality), ruff clean
 
 ## v0.1.0 (2026-03-17)
 

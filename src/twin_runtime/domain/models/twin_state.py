@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from twin_runtime.domain.models.primitives import (
     BiasCorrectionAction,
@@ -101,6 +101,15 @@ class TransferCoefficient(BaseModel):
     supporting_case_count: int = Field(ge=0)
     last_validated_at: datetime
 
+    @model_validator(mode="after")
+    def _validate_different_domains(self):
+        if self.from_domain == self.to_domain:
+            raise ValueError(
+                f"TransferCoefficient cannot be self-referential: "
+                f"from_domain and to_domain are both {self.from_domain.value!r}"
+            )
+        return self
+
 
 class ReliabilityProfileEntry(BaseModel):
     domain: DomainEnum
@@ -154,6 +163,15 @@ class BiasCorrectionEntry(BaseModel):
     still_active: bool
     evidence_count: int = Field(ge=0)
     last_observed_effect: Optional[str] = None
+
+    @property
+    def instruction(self) -> str:
+        """Extract the human-readable correction instruction from the payload.
+
+        This is the canonical accessor — callers should use this instead of
+        reaching into correction_payload['instruction'] directly.
+        """
+        return str(self.correction_payload.get("instruction", ""))
 
 
 class TemporalMetadata(BaseModel):

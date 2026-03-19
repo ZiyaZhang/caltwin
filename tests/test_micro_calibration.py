@@ -94,10 +94,13 @@ class TestApplyUpdate:
             previous_values={"shared_decision_core.risk_tolerance": old_risk},
             learning_rate_used=0.05, rationale="test",
         )
-        new_twin = apply_update(update, sample_twin)
-        assert new_twin.shared_decision_core.risk_tolerance == pytest.approx(old_risk + 0.03, abs=0.001)
-        assert update.applied is True
-        assert update.applied_at is not None
+        result = apply_update(update, sample_twin)
+        assert result.new_twin.shared_decision_core.risk_tolerance == pytest.approx(old_risk + 0.03, abs=0.001)
+        # Original update is NOT mutated (immutable return pattern)
+        assert update.applied is False
+        # Applied copy is in the result
+        assert result.applied_update.applied is True
+        assert result.applied_update.applied_at is not None
 
     def test_clamps_to_01(self, sample_twin):
         update = MicroCalibrationUpdate(
@@ -108,8 +111,8 @@ class TestApplyUpdate:
             previous_values={"shared_decision_core.risk_tolerance": 0.5},
             learning_rate_used=0.05, rationale="test",
         )
-        new_twin = apply_update(update, sample_twin)
-        assert new_twin.shared_decision_core.risk_tolerance <= 1.0
+        result = apply_update(update, sample_twin)
+        assert result.new_twin.shared_decision_core.risk_tolerance <= 1.0
 
     def test_max_delta_enforced(self, sample_twin):
         update = MicroCalibrationUpdate(
@@ -121,8 +124,8 @@ class TestApplyUpdate:
             learning_rate_used=0.05, rationale="test",
         )
         old = sample_twin.shared_decision_core.risk_tolerance
-        new_twin = apply_update(update, sample_twin)
-        actual_delta = abs(new_twin.shared_decision_core.risk_tolerance - old)
+        result = apply_update(update, sample_twin)
+        actual_delta = abs(result.new_twin.shared_decision_core.risk_tolerance - old)
         assert actual_delta <= 0.05
 
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from twin_runtime.domain.evidence.base import EvidenceFragment, SourceAdapter
 
@@ -64,5 +67,5 @@ class SourceRegistry:
                 fragments.extend(adapter.scan(since))
             except Exception as e:
                 # Don't let one source failure block others
-                print(f"Warning: {adapter.source_type} scan failed: {e}")
+                logger.warning("%s scan failed: %s", adapter.source_type, e)
         return fragments

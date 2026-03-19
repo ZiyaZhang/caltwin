@@ -41,7 +41,7 @@ class PatternInsight(BaseModel):
     correction_strategy: str
     affected_trace_ids: List[str] = Field(default_factory=list)
     domains: List[DomainEnum] = Field(default_factory=list)
-    weight: float = Field(default=2.0, ge=0.0)
+    weight: float = Field(default=2.0, ge=0.0, le=10.0)
     created_at: datetime
 
 

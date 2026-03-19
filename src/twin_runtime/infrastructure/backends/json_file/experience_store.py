@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 from twin_runtime.domain.models.experience import ExperienceLibrary
 from twin_runtime.infrastructure.backends.json_file._utils import atomic_write
+
+logger = logging.getLogger(__name__)
 
 _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
 
@@ -27,10 +30,14 @@ class ExperienceLibraryStore:
         self._path = self.base / "experience_library.json"
 
     def load(self) -> ExperienceLibrary:
-        """Load from JSON; return empty ExperienceLibrary if file doesn't exist."""
+        """Load from JSON; return empty ExperienceLibrary if file doesn't exist or is corrupt."""
         if not self._path.exists():
             return ExperienceLibrary()
-        return ExperienceLibrary.model_validate_json(self._path.read_text())
+        try:
+            return ExperienceLibrary.model_validate_json(self._path.read_text())
+        except Exception:
+            logger.warning("Corrupt experience library at %s, returning empty", self._path)
+            return ExperienceLibrary()
 
     def save(self, library: ExperienceLibrary) -> None:
         """Write the library to JSON."""

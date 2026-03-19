@@ -113,11 +113,22 @@ def apply_outcome_update(outcome: OutcomeRecord, twin: TwinState) -> Optional[Mi
     )
 
 
-def apply_update(update: MicroCalibrationUpdate, twin: TwinState) -> TwinState:
+class UpdateResult:
+    """Immutable result of applying a micro-calibration update."""
+    __slots__ = ("new_twin", "applied_update")
+
+    def __init__(self, new_twin: TwinState, applied_update: MicroCalibrationUpdate):
+        object.__setattr__(self, "new_twin", new_twin)
+        object.__setattr__(self, "applied_update", applied_update)
+
+
+def apply_update(update: MicroCalibrationUpdate, twin: TwinState) -> UpdateResult:
     """Apply a MicroCalibrationUpdate to a TwinState (deepcopy — non-destructive).
 
     Each delta is safety-capped per path pattern and then clamped to [0, 1].
-    Sets update.applied=True and update.applied_at=now after applying.
+    Returns an UpdateResult with both the new TwinState and a copy of the
+    update marked as applied. The original update object is NOT mutated,
+    ensuring retries are safe if persistence fails.
     Raises ValueError if the update was already applied (idempotency guard).
     """
     if update.applied:
@@ -135,10 +146,12 @@ def apply_update(update: MicroCalibrationUpdate, twin: TwinState) -> TwinState:
         parts = param_path.split(".")
         _apply_delta_to_model(new_twin, parts, delta)
 
-    update.applied = True
-    update.applied_at = datetime.now(timezone.utc)
+    applied_update = update.model_copy(update={
+        "applied": True,
+        "applied_at": datetime.now(timezone.utc),
+    })
 
-    return new_twin
+    return UpdateResult(new_twin, applied_update)
 
 
 def _apply_delta_to_model(obj, parts: list[str], delta: float) -> None:
