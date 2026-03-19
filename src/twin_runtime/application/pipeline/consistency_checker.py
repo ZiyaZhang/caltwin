@@ -27,8 +27,8 @@ class ConsistencyChecker:
         exp_lib: ExperienceLibrary,
     ) -> ConsistencyResult:
         # 1. Extract keywords from query
-        from twin_runtime.application.planner.memory_access_planner import _extract_keywords
-        keywords = _extract_keywords(trace.query)
+        from twin_runtime.domain.utils.text import extract_keywords
+        keywords = extract_keywords(trace.query)
 
         # 2. Search for relevant entries
         matches = exp_lib.search_entries(keywords, top_k=3)

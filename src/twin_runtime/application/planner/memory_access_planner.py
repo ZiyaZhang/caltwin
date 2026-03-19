@@ -68,16 +68,12 @@ def _compute_domain_gating(
 
 
 def _extract_keywords(query: str) -> List[str]:
-    """Extract keywords from query. Whitespace split + Chinese bigrams."""
-    if not query:
-        return []
-    words = query.split()
-    keywords = [w for w in words if len(w) > 2]  # Skip very short words
-    # Chinese bigrams: detect CJK characters
-    cjk_chars = [c for c in query if '\u4e00' <= c <= '\u9fff']
-    for i in range(len(cjk_chars) - 1):
-        keywords.append(cjk_chars[i] + cjk_chars[i + 1])
-    return keywords[:10]  # Cap at 10
+    """Extract keywords from query — thin wrapper around shared util.
+
+    Kept as module-private alias for backward compatibility within this file.
+    """
+    from twin_runtime.domain.utils.text import extract_keywords
+    return extract_keywords(query, max_keywords=10)
 
 
 def plan_memory_access(

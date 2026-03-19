@@ -91,10 +91,11 @@ def cmd_reflect(args):
                 _save_standalone_outcome(args, cal_store, user_id)
                 return
             trace_store = JsonFileTraceStore(str(_STORE_DIR / user_id / "traces"))
+            source = OutcomeSource(args.source)
             outcome, update = record_outcome(
                 trace_id=args.trace_id,
                 actual_choice=args.choice,
-                source=OutcomeSource.USER_CORRECTION,
+                source=source,
                 actual_reasoning=args.reasoning,
                 twin=twin,
                 trace_store=trace_store,
@@ -102,6 +103,8 @@ def cmd_reflect(args):
             )
             print(f"Outcome recorded: {outcome.outcome_id}")
             print(f"  Choice: {outcome.actual_choice}")
+            print(f"  Source: {source.value}")
+            print(f"  Confidence: {args.confidence:.2f}")
             print(f"  Matched prediction: {outcome.choice_matched_prediction}")
 
             # ReflectionGenerator integration (Phase B)
@@ -116,9 +119,11 @@ def cmd_reflect(args):
                 rg = ReflectionGenerator(llm=DefaultLLM())
                 ref_result = rg.process(trace, args.choice, exp_lib)
                 if ref_result.action == "generated" and ref_result.new_entry:
-                    exp_lib.add(ref_result.new_entry)
+                    from twin_runtime.application.calibration.experience_updater import ExperienceUpdater
+                    updater = ExperienceUpdater()
+                    result = updater.update(ref_result.new_entry, exp_lib)
                     exp_store.save(exp_lib)
-                    print(f"  Experience: new lesson extracted (weight=1.0)")
+                    print(f"  Experience: [{result.action.value}] {result.reason}")
                 elif ref_result.action == "confirmed":
                     exp_store.save(exp_lib)
                     if ref_result.confirmed_entry_id:
@@ -130,6 +135,28 @@ def cmd_reflect(args):
 
             if update:
                 print(f"  Calibration update generated (not yet applied)")
+
+            # Phase D: file counter + pattern mining trigger
+            count = _increment_reflect_counter(user_id)
+            if count >= 20:
+                try:
+                    from twin_runtime.application.calibration.hard_case_miner import HardCaseMiner
+                    from twin_runtime.interfaces.defaults import DefaultLLM
+
+                    mine_trace_ids = trace_store.list_traces(limit=50)
+                    mine_traces = [trace_store.load_trace(tid) for tid in mine_trace_ids]
+                    mine_outcomes = cal_store.list_outcomes()
+                    miner = HardCaseMiner(DefaultLLM())
+                    patterns = miner.mine(mine_traces, mine_outcomes)
+                    for p in patterns:
+                        exp_lib.add_pattern(p)
+                    if patterns:
+                        exp_store.save(exp_lib)
+                        print(f"  Pattern mining: found {len(patterns)} patterns")
+                    _reset_reflect_counter(user_id)
+                except Exception as mine_err:
+                    print(f"  Pattern mining skipped: {mine_err}", file=sys.stderr)
+
         except FileNotFoundError:
             print(f"Trace {args.trace_id} not found. Recording as standalone outcome.")
             _save_standalone_outcome(args, cal_store, user_id)
@@ -208,3 +235,24 @@ def cmd_drift_report(args):
         print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
     for sig in report.axis_signals:
         print(f"  [{sig.dimension}] {sig.direction} (magnitude={sig.magnitude:.2f})")
+
+
+# ---------------------------------------------------------------------------
+# Phase D: reflect counter for pattern mining trigger
+# ---------------------------------------------------------------------------
+
+def _increment_reflect_counter(user_id: str) -> int:
+    """Increment the reflect counter and return the new value."""
+    counter_path = _STORE_DIR / user_id / "reflect_count"
+    counter_path.parent.mkdir(parents=True, exist_ok=True)
+    count = int(counter_path.read_text()) if counter_path.exists() else 0
+    count += 1
+    counter_path.write_text(str(count))
+    return count
+
+
+def _reset_reflect_counter(user_id: str) -> None:
+    """Reset the reflect counter to 0."""
+    counter_path = _STORE_DIR / user_id / "reflect_count"
+    counter_path.parent.mkdir(parents=True, exist_ok=True)
+    counter_path.write_text("0")

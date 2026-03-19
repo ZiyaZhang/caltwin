@@ -57,7 +57,7 @@ def run(
 
     # 4. FORCE_REFUSE -> build minimal refusal trace
     if route.boundary_policy == BoundaryPolicy.FORCE_REFUSE:
-        trace = _build_refusal_trace(query, frame, guard_result, route, twin)
+        trace = _build_refusal_trace(query, frame, guard_result, route, twin, option_set=option_set)
         return trace
 
     # 5. S1_DIRECT -> single pass
@@ -97,8 +97,11 @@ def run(
 
     else:
         # NO_EXECUTION but not FORCE_REFUSE shouldn't happen, but handle gracefully
-        trace = _build_refusal_trace(query, frame, guard_result, route, twin)
+        trace = _build_refusal_trace(query, frame, guard_result, route, twin, option_set=option_set)
         return trace
+
+    # Phase D: populate option_set on trace
+    trace.option_set = option_set
 
     # 6b. S2-only post-synthesis consistency check
     if (route.execution_path == ExecutionPath.S2_DELIBERATE
@@ -158,6 +161,8 @@ def _build_refusal_trace(
     guard_result: Optional[ScopeGuardResult],
     route: RouteDecision,
     twin: TwinState,
+    *,
+    option_set: Optional[List[str]] = None,
 ) -> RuntimeDecisionTrace:
     """Build a minimal REFUSED trace without running the pipeline."""
     refusal_code = _determine_refusal_code(route, guard_result, frame)
@@ -170,6 +175,7 @@ def _build_refusal_trace(
         final_decision="This query is outside the twin's modeled capabilities.",
         decision_mode=DecisionMode.REFUSED,
         uncertainty=1.0,
+        option_set=option_set or [],
         query=query,
         situation_frame=frame.model_dump(mode="json"),
         scope_guard_result=_guard_to_dict(guard_result),
@@ -233,6 +239,7 @@ def _build_error_trace(
         final_decision=f"Internal error during {error_context} execution. The twin cannot produce a reliable answer.",
         decision_mode=DecisionMode.REFUSED,
         uncertainty=1.0,
+        option_set=option_set,
         query=query,
         situation_frame=frame.model_dump(mode="json"),
         scope_guard_result=_guard_to_dict(guard_result),

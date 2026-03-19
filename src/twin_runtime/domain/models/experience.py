@@ -129,6 +129,10 @@ class ExperienceLibrary(BaseModel):
         """Append an entry to the library."""
         self.entries.append(entry)
 
+    def add_pattern(self, pattern: PatternInsight) -> None:
+        """Add a PatternInsight to the library."""
+        self.patterns.append(pattern)
+
     @property
     def size(self) -> int:
         """Total number of entries and patterns."""
