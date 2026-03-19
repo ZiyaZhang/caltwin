@@ -3,8 +3,8 @@
 ## Getting Started
 
 ```bash
-git clone https://github.com/ZiyaZhang/caltwin.git
-cd caltwin
+git clone https://github.com/ZiyaZhang/twin-runtime.git
+cd twin-runtime
 pip install -e ".[dev]"
 ```
 
