@@ -43,13 +43,31 @@ from twin_runtime.domain.ports.llm_port import LLMPort
 # Domain mapping: Phase 2 question domain strings → DomainEnum
 # ---------------------------------------------------------------------------
 
-_DOMAIN_MAP: Dict[str, DomainEnum] = {
+_DEFAULT_DOMAIN_MAP: Dict[str, DomainEnum] = {
     "work": DomainEnum.WORK,
     "finance": DomainEnum.MONEY,
     "health": DomainEnum.LIFE_PLANNING,
     "relationships": DomainEnum.RELATIONSHIPS,
     "learning": DomainEnum.PUBLIC_EXPRESSION,
 }
+
+
+def _build_domain_map(questions: List[BootstrapQuestion]) -> Dict[str, DomainEnum]:
+    """Build domain mapping from question set.
+
+    Uses _DEFAULT_DOMAIN_MAP for known domains, and attempts DomainEnum(value)
+    for custom domain strings. Unknown domains are mapped to the closest match
+    or skipped (will be treated as undeclared).
+    """
+    result = dict(_DEFAULT_DOMAIN_MAP)
+    for q in questions:
+        if q.domain and q.domain not in result:
+            # Try direct enum match
+            try:
+                result[q.domain] = DomainEnum(q.domain)
+            except ValueError:
+                pass  # Custom domain not in DomainEnum — will be undeclared
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +128,11 @@ class BootstrapEngine:
         questions: Optional[List[BootstrapQuestion]] = None,
     ) -> None:
         self._llm = llm
-        source = questions if questions is not None else DEFAULT_QUESTIONS
+        self._questions = questions if questions is not None else DEFAULT_QUESTIONS
         self._question_map: Dict[str, BootstrapQuestion] = {
-            q.id: q for q in source
+            q.id: q for q in self._questions
         }
+        self._domain_map = _build_domain_map(self._questions)
 
     # -- public API ---------------------------------------------------------
 
@@ -294,7 +313,7 @@ class BootstrapEngine:
         for domain in all_domains:
             # Determine domain string key for Phase 2 answer lookup
             domain_key: Optional[str] = None
-            for key, mapped in _DOMAIN_MAP.items():
+            for key, mapped in self._domain_map.items():
                 if mapped == domain:
                     domain_key = key
                     break

@@ -700,12 +700,31 @@ def cmd_bootstrap(args):
                         pass
                     print(f"  Please enter a number 0-{len(q.options)-1}")
 
+            elif q.type == QuestionType.SLIDER:
+                while True:
+                    raw = input("  Your value (0.0-1.0): ").strip()
+                    try:
+                        val = float(raw)
+                        if 0.0 <= val <= 1.0:
+                            answers.append(BootstrapAnswer(
+                                question_id=q.id, type=q.type,
+                                slider_value=val, domain=q.domain, tags=q.tags,
+                            ))
+                            break
+                    except ValueError:
+                        pass
+                    print("  Please enter a number between 0.0 and 1.0")
+
             elif q.type == QuestionType.OPEN_SCENARIO:
                 text = input("  Your answer: ").strip()
                 answers.append(BootstrapAnswer(
                     question_id=q.id, type=q.type,
                     free_text=text, domain=q.domain, tags=q.tags,
                 ))
+
+            else:
+                print(f"  (Unsupported question type: {q.type.value}, skipping)")
+
             print()
 
     # Run engine
